@@ -1,0 +1,3 @@
+public abstract interface annotation class xyz/atkdev/rbxkt/SomeAnnotation : java/lang/annotation/Annotation {
+}
+
