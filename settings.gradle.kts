@@ -14,7 +14,7 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "rbxkt-plugin"
+rootProject.name = "rbxkt"
 
 include("compiler-plugin")
 include("gradle-plugin")
