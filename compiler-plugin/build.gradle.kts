@@ -4,6 +4,10 @@ plugins {
     id("com.github.gmazzo.buildconfig")
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 sourceSets {
     main {
         java.setSrcDirs(listOf("src"))
@@ -71,22 +75,6 @@ kotlin {
         optIn.add("org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi")
         optIn.add("org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI")
     }
-}
-
-val generateTests by tasks.registering(JavaExec::class) {
-    inputs.dir(layout.projectDirectory.dir("testData"))
-        .withPropertyName("testData")
-        .withPathSensitivity(PathSensitivity.RELATIVE)
-    outputs.dir(layout.projectDirectory.dir("test-gen"))
-        .withPropertyName("generatedTests")
-
-    classpath = sourceSets.testFixtures.get().runtimeClasspath
-    mainClass.set("xyz.atkdev.rbxkt.GenerateTestsKt")
-    workingDir = rootDir
-}
-
-tasks.compileTestKotlin {
-    dependsOn(generateTests)
 }
 
 fun Test.setLibraryProperty(propName: String, jarName: String) {

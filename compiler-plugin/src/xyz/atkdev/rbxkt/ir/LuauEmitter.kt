@@ -1,79 +1,74 @@
 package xyz.atkdev.rbxkt.ir
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.backend.jvm.ir.constantValue
-import org.jetbrains.kotlin.ir.IrStatement
+import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
-import org.jetbrains.kotlin.ir.declarations.IrDeclaration
-import org.jetbrains.kotlin.ir.declarations.IrField
 import org.jetbrains.kotlin.ir.declarations.IrFile
 import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
-import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrVariable
-import org.jetbrains.kotlin.ir.declarations.impl.IrFunctionImpl
-import org.jetbrains.kotlin.ir.expressions.IrBlock
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrConst
-import org.jetbrains.kotlin.ir.expressions.IrExpression
-import org.jetbrains.kotlin.ir.expressions.IrGetValue
-import org.jetbrains.kotlin.ir.expressions.IrReturn
-import org.jetbrains.kotlin.ir.expressions.IrSetValue
-import org.jetbrains.kotlin.ir.util.statements
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
+import xyz.atkdev.rbxkt.luau.*
 
-sealed interface LuauNode
-sealed interface LuauStatement : LuauNode
-sealed interface LuauExpression : LuauNode
-
-data class LuauFile(val statements: List<LuauStatement>) : LuauNode
-
-data class LuauFunction(val name: String, val params: List<String>, val body: List<LuauStatement>) : LuauStatement
-data class LuauReturn(val expression: LuauExpression) : LuauStatement
-data class LuauExpressionStatement(val expression: LuauExpression) : LuauStatement
-data class LuauVariable(val name: String, val expression: LuauExpression) : LuauStatement
-
-data class LuauStringLiteral(val value: String) : LuauExpression
-data class LuauCall(val name: String, val arguments: List<LuauExpression>) : LuauExpression
-data class LuauSetVariable(val name: String, val expression: LuauExpression) : LuauExpression
-data class LuauGetVariable(val name: String) : LuauExpression
-data class LuauBinaryExpression(val left: LuauExpression, val right: LuauExpression, val operator: String) : LuauExpression
-class LuauNil() : LuauExpression
-
-class LuauEmitter(private val context: IrPluginContext) {
+class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNode?, Nothing?> {
     fun emitFile(irFile: IrFile): LuauFile {
-        val statements = irFile.declarations.flatMap(::emitDeclaration)
-        return LuauFile(statements)
+        val comments = listOf(
+            LuauComment("--!optimize 2", false),
+            LuauComment("--!native", false)
+        )
+        val statements = irFile.declarations.mapNotNull { it.accept(this, null) }
+        return LuauFile(comments, statements)
     }
 
-    private fun emitDeclaration(irDeclaration: IrDeclaration): List<LuauStatement> = when (irDeclaration) {
-        is IrFunction -> emitFunction(irDeclaration)
-        is IrProperty -> listOf(LuauVariable(irDeclaration.name.asString(), emitExpression(irDeclaration.backingField?.initializer?.expression)))
-        is IrField -> listOf(LuauVariable(irDeclaration.name.asString(), emitExpression(irDeclaration.initializer?.expression)))
-        else -> emptyList()
+    override fun visitElement(element: IrElement, data: Nothing?): LuauNode? {
+        error("Unhandled element: ${element::class.simpleName}")
+        //println("Unhandled element: ${element::class.simpleName}")
+        //return null
     }
 
-    private fun emitExpression(irExpression: IrExpression?): LuauExpression = when(irExpression) {
-        is IrConst -> LuauStringLiteral(irExpression.value.toString())
-        is IrCall -> LuauCall(irExpression.symbol.owner.name.asString(), irExpression.valueArguments.mapNotNull { emitExpression(it) })
-        is IrGetValue -> LuauGetVariable(irExpression.symbol.owner.name.asString())
-        is IrSetValue -> LuauSetVariable(irExpression.symbol.owner.name.asString(), emitExpression(irExpression.value))
-        null -> LuauNil()
-        else -> error("Unexpected expression: $irExpression")
+    override fun visitCall(expression: IrCall, data: Nothing?): LuauNode? {
+        // TODO: implement overloading and receivers/methods
+        val name = expression.symbol.owner.name.asString()
+        val args = expression.valueArguments.mapNotNull { arg ->
+            arg?.accept(this, data) as? LuauExpr
+        }
+
+        return LuauCall(name, args)
     }
 
-    private fun emitStatement(irStatement: IrStatement): List<LuauStatement> = when (irStatement) {
-        is IrFunction -> emitFunction(irStatement)
-        is IrReturn -> listOf(LuauReturn(emitExpression(irStatement.value)))
-        is IrBlock -> irStatement.statements.flatMap(::emitStatement)
-        is IrExpression -> listOf(LuauExpressionStatement(emitExpression(irStatement)))
-        is IrVariable -> listOf(LuauVariable(irStatement.name.asString(), emitExpression(irStatement.initializer)))
-        else -> emptyList()
+    override fun visitFunction(declaration: IrFunction, data: Nothing?): LuauNode? {
+        val name = declaration.name.asString()
+        var params = declaration.valueParameters.map {
+            LuauParameter(LuauIdentifier(it.name.asString()), it.type.toString())
+        }
+        val body: List<LuauNode> = (declaration.body as? IrBlockBody)?.statements
+            ?.mapNotNull { it.accept(this, null) }
+            ?: emptyList()
+
+        return LuauFunctionStmt(name, params, body)
     }
 
-    private fun emitFunction(irFunction: IrFunction): List<LuauFunction> {
-        val name = irFunction.name.asString()
-        val params = irFunction.valueParameters.map { it.name.asString() }
-        val bodyStatements = irFunction.body?.statements?.flatMap(::emitStatement) ?: emptyList()
-        return listOf(LuauFunction(name, params, bodyStatements))
+    override fun visitConst(expression: IrConst, data: Nothing?): LuauNode? = when(val value = expression.value) {
+        is String -> LuauStringLiteral(value)
+        is Int, is UInt, is Double, is Float -> LuauNumberLiteral(value as Number)
+        is Boolean -> LuauBoolLiteral(value)
+        else -> error("Unsupported constant type: ${value?.let { it::class.simpleName }}")
+    }
+
+    override fun visitVariable(declaration: IrVariable, data: Nothing?): LuauNode? {
+        val name = declaration.name.asString()
+        val init = declaration.initializer?.accept(this, data) as LuauExpr?
+        return LuauVarDecl(name, "?", init)
+    }
+
+    override fun visitGetValue(expression: IrGetValue, data: Nothing?): LuauNode? {
+        val name = expression.symbol.owner.name.asString()
+        return LuauIdentifier(name)
+    }
+
+    override fun visitSetValue(expression: IrSetValue, data: Nothing?): LuauNode? {
+        val name = expression.symbol.owner.name.asString()
+        val value = expression.value.accept(this, data) as LuauExpr
+        return LuauAssign(name, value)
     }
 }

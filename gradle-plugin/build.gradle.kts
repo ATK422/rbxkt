@@ -4,6 +4,10 @@ plugins {
     id("java-gradle-plugin")
 }
 
+kotlin {
+    jvmToolchain(21)
+}
+
 sourceSets {
     main {
         java.setSrcDirs(listOf("src"))
@@ -39,13 +43,16 @@ buildConfig {
     )
 }
 
+group = "xyz.atkdev.rbxkt"
+version = "1.0.0"
+
 gradlePlugin {
     plugins {
-        create("SimplePlugin") {
-            id = rootProject.group.toString()
-            displayName = "SimplePlugin"
-            description = "SimplePlugin"
-            implementationClass = "xyz.atkdev.rbxkt.SimpleGradlePlugin"
+        create("RbxKtPlugin") {
+            id = "xyz.atkdev.rbxkt"
+            displayName = "RbxKtPlugin"
+            description = "RbxKtPlugin"
+            implementationClass = "xyz.atkdev.rbxkt.RbxKtGradlePlugin"
         }
     }
 }
