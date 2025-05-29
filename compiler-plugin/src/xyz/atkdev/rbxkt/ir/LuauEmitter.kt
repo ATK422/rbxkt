@@ -80,7 +80,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
     // LambdaStmt is technically a LuauFunctionExpr and not a Stmt
     // so maybe revisit this in the future
     // TODO: Needs a return type
-    override fun visitFunctionExpression(expression: IrFunctionExpression, data: Nothing?): LuauLambdaStmt? {
+    override fun visitFunctionExpression(expression: IrFunctionExpression, data: Nothing?): LuauLambdaExpr? {
         val params = expression.function.valueParameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
@@ -88,7 +88,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             ?.mapNotNull { it.accept(this, null) as LuauStmt? }
             ?: emptyList()
 
-        return LuauLambdaStmt(params, body)
+        return LuauLambdaExpr(params, body)
     }
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr? = when(val value = expression.value) {

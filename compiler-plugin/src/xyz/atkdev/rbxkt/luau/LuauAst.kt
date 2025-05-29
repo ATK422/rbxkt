@@ -59,8 +59,17 @@ data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
 }
 
 data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauStmt>) : LuauExpr {
-    // Hello vro
-    override fun render() = ""
+    override fun render(): String {
+        val builder = IndentedStringBuilder()
+        builder.line("function(${params.joinToString(", ") { it.render() }})")
+        builder.indent {
+            for (stmt in body) {
+                stmt.render(builder)
+            }
+        }
+        builder.append("end")
+        return builder.toString()
+    }
 }
 
 data class LuauFunctionStmt(val name: String, val params: List<LuauParameter>, val body: List<LuauStmt>, val returnType: String?) : LuauStmt {

@@ -12,8 +12,8 @@ class IndentedStringBuilder {
         level--
     }
 
-    fun line(text: String) = builder.appendLine("$indentString$text")
-    fun append(text: String) = builder.append("$text")
+    fun line(text: String) = text.split("\n").forEach { append("$indentString$it\n") }
+    fun append(text: String): StringBuilder = builder.append(text)
 
     override fun toString() = builder.toString()
 }
