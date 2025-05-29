@@ -26,9 +26,11 @@ class LuauIrGenerationExtension(
 
 //            val code = LuauPrinter.printFile(luauAst)
 
-            val outFile = File(outputDir, irFile.nameWithoutExtension + ".luau")
-            outFile.parentFile.mkdirs()
-            outFile.writeText(code)
+            val astOut = File(outputDir, irFile.nameWithoutExtension + ".luauast")
+            val luauOut = File(outputDir, irFile.nameWithoutExtension + ".luau")
+            luauOut.parentFile.mkdirs()
+            luauOut.writeText(code)
+            astOut.writeText(luauFile.toString())
         }
     }
 }

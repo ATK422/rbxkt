@@ -14,6 +14,7 @@ import org.jetbrains.kotlin.ir.types.isInt
 import org.jetbrains.kotlin.ir.types.isLong
 import org.jetbrains.kotlin.ir.types.isNumber
 import org.jetbrains.kotlin.ir.types.isShort
+import org.jetbrains.kotlin.ir.util.statements
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 //import org.jetbrains.kotlin.ir.visitors.IrVisitor
 import xyz.atkdev.rbxkt.luau.*
@@ -37,12 +38,11 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
     override fun visitCall(expression: IrCall, data: Nothing?): LuauNode? {
         // TODO: implement overloading
         val receiver = expression.dispatchReceiver
-            ?.accept(this, data) as? LuauExpr
-
-        val args = expression.valueArguments
-            .mapNotNull { it?.accept(this, data) as? LuauExpr }
+            ?.accept(this, null) as? LuauExpr
 
         val name = expression.symbol.owner.name.asString()
+        val args = expression.valueArguments
+            .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
         val isNumericCall = receiver != null && expression.dispatchReceiver!!.type.run {
             isNumber() || isInt() || isDouble() || isFloat() || isByte() || isShort() || isLong()
@@ -59,7 +59,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
 
             val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver, op, rhs)
+            return LuauBinaryExpr(receiver!!, op, rhs)
         }
 
         return LuauCall(name, args)
@@ -75,6 +75,20 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             ?: emptyList()
 
         return LuauFunctionStmt(name, params, body, LuauTypeSolver.fromIr(declaration.returnType))
+    }
+
+    // LambdaStmt is technically a LuauFunctionExpr and not a Stmt
+    // so maybe revisit this in the future
+    // TODO: Needs a return type
+    override fun visitFunctionExpression(expression: IrFunctionExpression, data: Nothing?): LuauLambdaStmt? {
+        val params = expression.function.valueParameters.map {
+            LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
+        }
+        val body = expression.function.body?.statements
+            ?.mapNotNull { it.accept(this, null) as LuauStmt? }
+            ?: emptyList()
+
+        return LuauLambdaStmt(params, body)
     }
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr? = when(val value = expression.value) {

@@ -13,6 +13,7 @@ class IndentedStringBuilder {
     }
 
     fun line(text: String) = builder.appendLine("$indentString$text")
+    fun append(text: String) = builder.append("$text")
 
     override fun toString() = builder.toString()
 }

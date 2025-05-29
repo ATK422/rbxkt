@@ -42,16 +42,12 @@ data class LuauStringLiteral(val value: String) : LuauExpr {
     override fun render() = "\"$value\""
 }
 
-//data class LuauFunctionExpr(val params: List<LuauParameter>, val stmts: List<LuauStmt>) : LuauExpr {
-//    override fun render() = TODO()
-//}
-
 data class LuauParameter(val name: LuauIdentifier, val type: String) : LuauExpr {
     override fun render() = "${name.render()}: $type"
 }
 
 data class LuauComment(val comment: String, val multiline: Boolean) : LuauExpr {
-    override fun render() = if (multiline) "--[[\n$comment\n]]" else "-- $comment"
+    override fun render() = if (multiline) "--[[\n$comment\n]]" else "--$comment"
 }
 
 data class LuauBinaryExpr(val left: LuauExpr, val op: String, val right: LuauExpr) : LuauExpr {
@@ -62,6 +58,10 @@ data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
     override fun render() = "$name(${args.joinToString(", ") { it.render() }})"
 }
 
+data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauStmt>) : LuauExpr {
+    // Hello vro
+    override fun render() = ""
+}
 
 data class LuauFunctionStmt(val name: String, val params: List<LuauParameter>, val body: List<LuauStmt>, val returnType: String?) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
