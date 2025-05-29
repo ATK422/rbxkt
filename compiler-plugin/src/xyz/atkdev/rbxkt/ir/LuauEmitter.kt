@@ -3,10 +3,9 @@ package xyz.atkdev.rbxkt.ir
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
-import org.jetbrains.kotlin.ir.declarations.IrFile
-import org.jetbrains.kotlin.ir.declarations.IrFunction
-import org.jetbrains.kotlin.ir.declarations.IrVariable
+import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.isByte
 import org.jetbrains.kotlin.ir.types.isDouble
 import org.jetbrains.kotlin.ir.types.isFloat
@@ -62,11 +61,22 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             return LuauBinaryExpr(receiver!!, op, rhs)
         }
 
+        if (expression.dispatchReceiver != null) {
+            val symbol = expression.dispatchReceiver?.javaClass
+                ?.methods?.firstOrNull { it.name == "getSymbol" }
+                ?.invoke(expression.dispatchReceiver) as? IrSymbol
+            val owner = symbol?.owner as IrDeclarationWithName
+            return LuauCall(owner.name.asString(), args)
+        }
+
         return LuauCall(name, args)
     }
 
     override fun visitFunction(declaration: IrFunction, data: Nothing?): LuauFunctionStmt? {
         val name = declaration.name.asString()
+        var typeParams = declaration.typeParameters.map {
+            it.name.asString()
+        }
         var params = declaration.valueParameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
@@ -74,11 +84,9 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             ?.mapNotNull { it.accept(this, null) as LuauStmt? }
             ?: emptyList()
 
-        return LuauFunctionStmt(name, params, body, LuauTypeSolver.fromIr(declaration.returnType))
+        return LuauFunctionStmt(name, typeParams, params, body, LuauTypeSolver.fromIr(declaration.returnType))
     }
 
-    // LambdaStmt is technically a LuauFunctionExpr and not a Stmt
-    // so maybe revisit this in the future
     // TODO: Needs a return type
     override fun visitFunctionExpression(expression: IrFunctionExpression, data: Nothing?): LuauLambdaExpr? {
         val params = expression.function.valueParameters.map {
@@ -89,6 +97,48 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             ?: emptyList()
 
         return LuauLambdaExpr(params, body)
+    }
+
+    override fun visitClass(declaration: IrClass, data: Nothing?): LuauClass {
+        val name = declaration.name.asString()
+        val memberTypes = LuauTypeSolver.fromClass(declaration)
+        val props = declaration.declarations.filterIsInstance<IrProperty>()
+        val initializers = declaration.declarations.filterIsInstance<IrAnonymousInitializer>()
+        val initStmts = initializers.flatMap { (it.body as? IrBlockBody)?.statements ?: emptyList() }
+            .mapNotNull { stmt ->
+                val result = stmt.accept(this, null)
+                if (result is LuauCall) {
+                    val stmt = stmt as IrCall
+                    val name = stmt.symbol.owner.name.asString()
+                    if (name.startsWith("<set-") && result.args.size == 1) {
+                        val prop = name.removePrefix("<set-").removeSuffix(">")
+                        val value = result.args[0]
+                        return@mapNotNull LuauAssign("self.$prop", value)
+                    }
+                    return@mapNotNull null  // ignore other calls
+                }
+                result as? LuauStmt
+            }
+
+        val constructorExprs = props.mapNotNull {
+            val initExpr = it.backingField?.initializer?.expression
+            if (initExpr != null) {
+                val target = it.name.asString()
+                val value = initExpr.accept(this, null) as? LuauExpr ?: return@mapNotNull null
+                LuauAssign(target, value)
+            } else null
+        }
+
+        return LuauClass(name, memberTypes, constructorExprs, initStmts)
+    }
+
+
+    override fun visitConstructorCall(expression: IrConstructorCall, data: Nothing?): LuauConstructorCall {
+        val name = (expression.symbol.owner.parent as? IrClass)?.name?.asString() ?: "Unknown"
+        val args = expression.valueArguments
+            .mapNotNull { it?.accept(this, data) as? LuauExpr }
+
+        return LuauConstructorCall(name, args)
     }
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr? = when(val value = expression.value) {

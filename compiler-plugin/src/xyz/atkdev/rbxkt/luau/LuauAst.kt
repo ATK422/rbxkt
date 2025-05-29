@@ -1,7 +1,5 @@
 package xyz.atkdev.rbxkt.luau
 
-import xyz.atkdev.rbxkt.luau.IndentedStringBuilder
-
 sealed interface LuauNode
 sealed interface LuauExpr : LuauNode {
     fun render(): String
@@ -58,6 +56,18 @@ data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
     override fun render() = "$name(${args.joinToString(", ") { it.render() }})"
 }
 
+data class LuauNamecall(val recv: String, val name: String, val args: List<LuauExpr>) : LuauExpr {
+    override fun render() = ""
+}
+
+data class LuauConstructorCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
+    override fun render() = "$name.new(${args.joinToString(", ") { it.render() }})"
+}
+
+data class LuauConstructor(val name: String) : LuauExpr {
+    override fun render() = "$name()"
+}
+
 data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauStmt>) : LuauExpr {
     override fun render(): String {
         val builder = IndentedStringBuilder()
@@ -72,9 +82,12 @@ data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauSt
     }
 }
 
-data class LuauFunctionStmt(val name: String, val params: List<LuauParameter>, val body: List<LuauStmt>, val returnType: String?) : LuauStmt {
+data class LuauFunctionStmt(val name: String, val typeParams: List<String>, val params: List<LuauParameter>, val body: List<LuauStmt>, val returnType: String?) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
-        builder.line("function $name(${params.joinToString(", ") { it.render() }})${if (returnType != null) ": $returnType" else ""}")
+        val typeParams = if (typeParams.isNotEmpty()) {
+            "<${typeParams.joinToString(", ")}>"
+        } else ""
+        builder.line("function $name$typeParams(${params.joinToString(", ") { it.render() }})${if (returnType != null) ": $returnType" else ""}")
         builder.indent {
             for (stmt in body) {
                 stmt.render(builder)
@@ -84,21 +97,63 @@ data class LuauFunctionStmt(val name: String, val params: List<LuauParameter>, v
     }
 }
 
-data class LuauNamecall(val recv: String, val name: String, val args: List<LuauExpr>) : LuauStmt {
+data class LuauClass(val name: String, val memberTypes: List<String>, val constructorExprs: List<LuauAssign>, val initStmts: List<LuauStmt>) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
-        builder.line("name call Lol!")
+        val params = constructorExprs.joinToString(", ") { it.target }
+        builder.line("type $name = {")
+        builder.indent {
+            builder.line("${memberTypes.joinToString(",\n") { it }}")
+        }
+        builder.line("}")
+
+        builder.line("local $name")
+        builder.line("$name = setmetatable({}, {")
+        builder.indent {
+            builder.line("__tostring = function()")
+            builder.indent {
+                builder.line("return \"$name\"")
+            }
+            builder.line("end")
+        }
+        builder.line("})")
+        builder.line("$name.__index = $name")
+        builder.line("function $name.new($params)")
+        builder.indent {
+            builder.line("local self = setmetatable({}, $name)")
+            builder.line("self:constructor($params)")
+            builder.line("self:init()")
+            builder.line("return self")
+        }
+        builder.line("end")
+        builder.line("function $name:constructor($params)")
+        builder.indent {
+            for (init in constructorExprs) {
+                builder.line("self.${init.target} = ${init.value.render()}")
+            }
+        }
+        builder.line("end")
+        builder.line("function $name:init()")
+        builder.indent {
+            for (stmt in initStmts) {
+                stmt.render(builder)
+            }
+        }
+        builder.line("end")
     }
 }
+
 data class LuauVarDecl(val name: String, val type: String, val init: LuauExpr?) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
         builder.line("local $name: $type = ${init?.render() ?: "nil"}")
     }
 }
+
 data class LuauAssign(val target: String, val value: LuauExpr) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
         builder.line("$target = ${value.render()}")
     }
 }
+
 data class LuauReturn(val args: List<LuauExpr>) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
         builder.line("return ${args.joinToString(", ") { it.render() }}")
