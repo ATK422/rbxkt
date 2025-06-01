@@ -15,6 +15,7 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
 }
 
 data class LuauFile(val directives: List<LuauComment>, val stmts: List<LuauStmt>) : LuauNode {
+    var exports: MutableList<LuauIdentifier> = mutableListOf()
     fun render(): String {
         val builder = IndentedStringBuilder()
 
@@ -25,6 +26,15 @@ data class LuauFile(val directives: List<LuauComment>, val stmts: List<LuauStmt>
         for (stmt in stmts) {
             stmt.render(builder)
         }
+
+        builder.line("return {")
+        builder.indent {
+            for (export in exports) {
+                val name = export.render()
+                builder.line("${name} = ${name}")
+            }
+        }
+        builder.line("}")
 
         return builder.toString()
     }
