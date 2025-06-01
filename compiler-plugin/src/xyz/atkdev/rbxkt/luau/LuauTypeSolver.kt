@@ -1,8 +1,7 @@
 package xyz.atkdev.rbxkt.luau
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.ir.backend.js.lower.calls.PrimitiveType
-import org.jetbrains.kotlin.ir.backend.js.lower.calls.getPrimitiveType
+import org.jetbrains.kotlin.name.Name
 import org.jetbrains.kotlin.ir.declarations.IrClass
 import org.jetbrains.kotlin.ir.declarations.IrProperty
 import org.jetbrains.kotlin.ir.declarations.IrTypeParameter
@@ -13,6 +12,11 @@ import org.jetbrains.kotlin.ir.util.isFunction
 object LuauTypeSolver {
     var irContext: IrPluginContext? = null
     private val pluginContext get() = irContext!!
+
+    fun fromName(name: Name) = when(val name = name.asString()) {
+        "Unit" -> "nil"
+        else -> name
+    }
 
     fun fromClass(ir: IrClass): List<String> {
         return ir.declarations
@@ -40,8 +44,11 @@ object LuauTypeSolver {
             else if (ir.isString()) "string"
             else if (ir.isArray()) "{ [number]: ${fromIr(ir.getArrayElementType(pluginContext.irBuiltIns))} }>"
             else if (ir.isFunction()) fromFunction(ir)
-            else if (ir is IrSimpleType && ir.classifier.owner is IrClass) (ir.classifier.owner as IrClass).name.asString()
-            else if (ir is IrSimpleType && ir.classifier.owner is IrTypeParameter) (ir.classifier.owner as IrTypeParameter).name.asString()
+            else if (ir is IrSimpleType) when (val owner = ir.classifier.owner) {
+                is IrClass -> fromName(owner.name)
+                is IrTypeParameter -> fromName(owner.name)
+                else -> "any"
+            }
             else "any"
 
         return result + ir.isMarkedNullable().let { if (it) "?" else "" }

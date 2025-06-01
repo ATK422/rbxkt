@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.backend.js.utils.nameWithoutExtension
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
+import org.jetbrains.kotlin.ir.util.*
 import xyz.atkdev.rbxkt.luau.LuauTypeSolver
 import java.io.File
 
@@ -19,18 +20,19 @@ class LuauIrGenerationExtension(
         moduleFragment.files.forEach { irFile ->
             val emitter = LuauEmitter(pluginContext)
             val luauFile = emitter.emitFile(irFile)
-//            val renderer = LuauRenderer()
-//            renderer.renderNode(luauFile)
             val code = luauFile.render()
-
-
-//            val code = LuauPrinter.printFile(luauAst)
 
             val astOut = File(outputDir, irFile.nameWithoutExtension + ".luauast")
             val luauOut = File(outputDir, irFile.nameWithoutExtension + ".luau")
+            val irOut = File(outputDir, irFile.nameWithoutExtension + ".ir")
             luauOut.parentFile.mkdirs()
             luauOut.writeText(code)
             astOut.writeText(luauFile.toString())
+            irOut.writeText(irFile.dumpKotlinLike(
+                KotlinLikeDumpOptions(
+
+                )
+            ))
         }
     }
 }
