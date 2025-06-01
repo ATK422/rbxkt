@@ -1,10 +1,14 @@
 package xyz.atkdev.rbxkt.ir
 
+import org.jetbrains.kotlin.analysis.decompiler.stub.flags.VISIBILITY
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
+import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.overrides.isNonPrivate
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
@@ -40,10 +44,21 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             LuauComment("!optimize 2", false),
             LuauComment("!native", false)
         )
+
         val statements: List<LuauStmt> = irFile.declarations.mapNotNull {
             lowerToStmt(it.accept(this, null))
         }
-        return LuauFile(comments, statements)
+
+        val file = LuauFile(comments, statements)
+        for (stmt in irFile.declarations) {
+            if (stmt is IrDeclarationWithVisibility) {
+                if (stmt.isNonPrivate) {
+                    file.exports.add(LuauIdentifier((stmt as IrDeclarationWithName).name.asString()))
+                }
+            }
+        }
+
+        return file
     }
 
     override fun visitElement(element: IrElement, data: Nothing?): LuauNode {
@@ -57,10 +72,12 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val receiver = expression.dispatchReceiver
             ?.accept(this, null) as? LuauExpr
 
-        val name = expression.symbol.owner.name.asString()
+        val owner = expression.symbol.owner
+        val name = owner.name.asString()
         val args = expression.valueArguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
+        val isSetterGetter = owner.correspondingPropertySymbol != null
         val isSuperCall = expression.superQualifierSymbol != null
         val isNumericCall = receiver != null && expression.dispatchReceiver!!.type.run {
             isNumber() || isInt() || isDouble() || isFloat() || isByte() || isShort() || isLong()
@@ -80,17 +97,37 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             return LuauBinaryExpr(receiver!!, op, rhs)
         } else if (isSuperCall) {
             return LuauCall("self.super:$name", args)
-        }
+        } else if (isSetterGetter) {
+            val property = owner.correspondingPropertySymbol?.owner!!
+            val isSetter = owner == property.setter
+            val isGetter = owner == property.getter
 
 
-        if (name.startsWith("<set-")) {
-            val prop = name.removePrefix("<set-").removeSuffix(">")
-            val value = args[0]
-            return LuauAssign("self.$prop", value)
-        } else if (name.startsWith("<get-")) {
-            val prop = name.removePrefix("<get-").removeSuffix(">")
-            return LuauIdentifier("self.$prop")
+            // TODO: remove hardcoded self because that just not correct but i'm lazy
+            if (isSetter) {
+                val ignore = property.setter?.body?.statements?.first() is IrReturn
+                if (ignore) {
+                    val prop = name.removePrefix("<set-").removeSuffix(">")
+                    val value = args[0]
+                    return LuauAssign("self.$prop", value)
+                }
+            } else if (isGetter) {
+                val ignore = property.getter?.body?.statements?.first() is IrReturn
+                if (ignore) {
+                    val prop = name.removePrefix("<get-").removeSuffix(">")
+                    return LuauIdentifier("self.$prop")
+                }
+            }
         }
+
+//        if (name.startsWith("<set-")) {
+//            val prop = name.removePrefix("<set-").removeSuffix(">")
+//            val value = args[0]
+//            return LuauAssign("self.$prop", value)
+//        } else if (name.startsWith("<get-")) {
+//            val prop = name.removePrefix("<get-").removeSuffix(">")
+//            return LuauIdentifier("self.$prop")
+//        }
 
         if (expression.dispatchReceiver != null) {
             val symbol = expression.dispatchReceiver?.javaClass
