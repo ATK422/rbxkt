@@ -15,12 +15,22 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
 }
 
 data class LuauFile(val directives: List<LuauComment>, val stmts: List<LuauStmt>) : LuauNode {
+    var imports: MutableMap<String, MutableList<String>> = mutableMapOf()
     var exports: MutableList<LuauIdentifier> = mutableListOf()
+
     fun render(): String {
         val builder = IndentedStringBuilder()
 
         for (directive in directives) {
             builder.line(directive.render())
+        }
+
+        for ((importPath, identifiers) in imports) {
+            val moduleName = importPath.substringAfterLast('.')
+            builder.line("local $moduleName = require($importPath)")
+            for (identifier in identifiers) {
+                builder.line("local $identifier = $moduleName.$identifier")
+            }
         }
 
         for (stmt in stmts) {

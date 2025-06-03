@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.analysis.decompiler.stub.flags.VISIBILITY
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrElementBase
 import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
 import org.jetbrains.kotlin.ir.declarations.*
@@ -14,8 +15,84 @@ import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
+import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.name.FqName
 //import org.jetbrains.kotlin.ir.visitors.IrVisitor
 import xyz.atkdev.rbxkt.luau.*
+
+fun analyzeImports(file: IrFile): MutableMap<LuauIdentifier, LuauCall> {
+    val filePkgName = file.nameWithPackage
+
+    val declarations = file.declarations
+    var imports: MutableMap<LuauIdentifier, LuauCall> = mutableMapOf()
+
+    fun visit(declaration: IrDeclaration) {
+        when(declaration) {
+            is IrClass -> {
+                val owner = declaration.symbol.owner
+                val fqName = owner.fqNameWhenAvailable
+                if (fqName != null) {
+                    error(fqName.asString())
+                }
+            }
+        }
+    }
+
+    for (declaration in declarations) {
+        visit(declaration)
+    }
+
+    return imports
+}
+
+fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
+    val declarations = irFile.declarations
+    var exports: MutableList<LuauIdentifier> = mutableListOf()
+    for (declaration in declarations) {
+        if (declaration is IrDeclarationWithVisibility && declaration.isNonPrivate) {
+            exports.add(LuauIdentifier((declaration as IrDeclarationWithName).name.asString()))
+        }
+    }
+    return exports
+}
+
+/*
+
+Map:
+Key: path
+Value: []string
+
+ */
+
+class LuauImportAnalyzer : IrElementVisitorVoid {
+    private lateinit var currentFileName: String
+    private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
+
+    fun analyze(file: IrFile): MutableMap<String, MutableList<String>> {
+        currentFileName = file.nameWithPackage
+        importsMap.clear()
+        file.accept(this, null)
+        return importsMap
+    }
+
+    override fun visitElement(element: IrElement) {
+        val fqName = when (element) {
+            is IrCall -> element.symbol.owner.fqNameWhenAvailable?.asString()
+            else -> null
+        }
+
+        if (fqName != null && fqName != currentFileName) {
+            val parts = fqName.split('.')
+            val identifier = parts.last()
+            val path = parts.dropLast(1).joinToString(".")
+
+            val identifiers = importsMap.getOrPut(path) { mutableListOf() }
+            identifiers.add(identifier)
+        }
+
+        element.acceptChildren(this, null)
+    }
+}
 
 class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNode, Nothing?> {
     private lateinit var currentClass: IrClass
@@ -49,14 +126,10 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             lowerToStmt(it.accept(this, null))
         }
 
+        val importVisitor = LuauImportAnalyzer()
         val file = LuauFile(comments, statements)
-        for (stmt in irFile.declarations) {
-            if (stmt is IrDeclarationWithVisibility) {
-                if (stmt.isNonPrivate) {
-                    file.exports.add(LuauIdentifier((stmt as IrDeclarationWithName).name.asString()))
-                }
-            }
-        }
+        file.imports = importVisitor.analyze(irFile)
+        file.exports = analyzeExports(irFile)
 
         return file
     }
