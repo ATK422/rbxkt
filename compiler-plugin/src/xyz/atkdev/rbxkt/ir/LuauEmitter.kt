@@ -1,11 +1,7 @@
 package xyz.atkdev.rbxkt.ir
 
-import org.jetbrains.kotlin.analysis.decompiler.stub.flags.VISIBILITY
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.IrElementBase
-import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
@@ -16,34 +12,7 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import org.jetbrains.kotlin.name.FqName
-//import org.jetbrains.kotlin.ir.visitors.IrVisitor
 import xyz.atkdev.rbxkt.luau.*
-
-fun analyzeImports(file: IrFile): MutableMap<LuauIdentifier, LuauCall> {
-    val filePkgName = file.nameWithPackage
-
-    val declarations = file.declarations
-    var imports: MutableMap<LuauIdentifier, LuauCall> = mutableMapOf()
-
-    fun visit(declaration: IrDeclaration) {
-        when(declaration) {
-            is IrClass -> {
-                val owner = declaration.symbol.owner
-                val fqName = owner.fqNameWhenAvailable
-                if (fqName != null) {
-                    error(fqName.asString())
-                }
-            }
-        }
-    }
-
-    for (declaration in declarations) {
-        visit(declaration)
-    }
-
-    return imports
-}
 
 fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
     val declarations = irFile.declarations
@@ -55,14 +24,6 @@ fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
     }
     return exports
 }
-
-/*
-
-Map:
-Key: path
-Value: []string
-
- */
 
 class LuauImportAnalyzer : IrElementVisitorVoid {
     private lateinit var currentFileName: String
