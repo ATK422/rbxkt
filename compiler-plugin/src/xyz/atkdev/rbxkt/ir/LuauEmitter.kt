@@ -44,12 +44,12 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             LuauComment("!native", false)
         )
 
-        val statements: List<LuauStmt> = irFile.declarations.mapNotNull {
+        val statements: List<LuauStmt> = irFile.declarations.map {
             lowerToStmt(it.accept(this, null))
         }
 
         val importVisitor = LuauImportAnalyzer()
-        val file = LuauFile(comments, statements)
+        val file = LuauFile(irFile.kotlinFqName.asString(), comments, statements)
         file.imports = importVisitor.analyze(irFile)
         file.exports = analyzeExports(irFile)
 
@@ -89,7 +89,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
 
             val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver!!, op, rhs)
+            return LuauBinaryExpr(receiver, op, rhs)
         } else if (isSuperCall) {
             return LuauCall("self.super:$name", args)
         } else if (isSetterGetter) {
@@ -140,14 +140,14 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
             name = "$receiverName:$name"
         }
-        var typeParams = declaration.typeParameters.map {
+        val typeParams = declaration.typeParameters.map {
             it.name.asString()
         }
-        var params = declaration.valueParameters.map {
+        val params = declaration.valueParameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
         val body: List<LuauStmt> = (declaration.body as? IrBlockBody)?.statements
-            ?.mapNotNull { lowerToStmt(it.accept(this, null)) }
+            ?.map { lowerToStmt(it.accept(this, null)) }
             ?: emptyList()
 
         return LuauFunctionStmt(name, typeParams, params, body, LuauTypeSolver.fromIr(declaration.returnType))
@@ -159,7 +159,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
         val body = expression.function.body?.statements
-            ?.mapNotNull { lowerToStmt(it.accept(this, null)) }
+            ?.map { lowerToStmt(it.accept(this, null)) }
             ?: emptyList()
 
         return LuauLambdaExpr(params, body)
@@ -187,8 +187,8 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
     }
 
     override fun visitConstructor(declaration: IrConstructor, data: Nothing?): LuauFunctionStmt {
-        var clazz = (declaration.parent as IrClass)
-        var className = clazz.name.asString()
+        val clazz = (declaration.parent as IrClass)
+        val className = clazz.name.asString()
         val superClass = clazz.superTypes
             .mapNotNull { it.classifierOrNull as? IrClassSymbol }
             .map { it.owner }
@@ -201,13 +201,13 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val params = declaration.valueParameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
-        var body = declaration.body?.statements?.mapNotNull {
+        var body = declaration.body?.statements?.map {
             lowerToStmt(it.accept(this, null))
         }?: emptyList()
         val returnType = LuauTypeSolver.fromIr(declaration.returnType)
         if (declaration.isPrimary) {
             if (superClass != null) {
-                var superClassName = superClass.name.asString()
+                val superClassName = superClass.name.asString()
                 body = listOf(LuauVarDecl("self", className, LuauCall("setmetatable", listOf(
                     LuauIdentifier("{}"),
                     LuauIdentifier(className)
@@ -241,11 +241,11 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         } else emptyList()
 
         val initializer = LuauFunctionStmt("$name:init", listOf(), listOf(), initBody, null)
-        val constructors = declarations.filterIsInstance<IrConstructor>().mapNotNull {
+        val constructors = declarations.filterIsInstance<IrConstructor>().map {
             it.accept(this, null) as LuauFunctionStmt
         }
 
-        val memberFunctions = declaration.functions.mapNotNull {
+        val memberFunctions = declaration.functions.map {
             it.accept(this, null) as LuauFunctionStmt
         }.filter {
             it.name != "toString"
@@ -266,7 +266,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
     }
 
     override fun visitStringConcatenation(expression: IrStringConcatenation, data: Nothing?): LuauInterpolatedStringLiteral {
-        var args = expression.arguments.map { it.accept(this, null) as LuauExpr }
+        val args = expression.arguments.map { it.accept(this, null) as LuauExpr }
         return LuauInterpolatedStringLiteral(args)
     }
 

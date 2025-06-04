@@ -3,6 +3,7 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
         maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap")
+        mavenLocal()
     }
     
 }
@@ -18,3 +19,4 @@ rootProject.name = "rbxkt"
 
 include("compiler-plugin")
 include("gradle-plugin")
+include("sample")
