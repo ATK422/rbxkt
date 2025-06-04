@@ -1,4 +1,4 @@
-package wtf.lynn.xyz.atkdev.rbxkt.ir
+package xyz.atkdev.rbxkt.ir
 
 import org.jetbrains.kotlin.ir.declarations.IrConstructor
 

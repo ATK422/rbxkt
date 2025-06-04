@@ -1,6 +1,6 @@
 package xyz.atkdev.rbxkt.luau
 
-import wtf.lynn.xyz.atkdev.rbxkt.util.IndentedStringBuilder
+import xyz.atkdev.rbxkt.util.IndentedStringBuilder
 
 sealed interface LuauNode {
     fun display(builder: IndentedStringBuilder)
@@ -24,7 +24,7 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
 }
 
 data class LuauFile(val name: String, val directives: List<LuauComment>, val stmts: List<LuauStmt>) : LuauNode {
-    var imports: MutableMap<String, MutableList<String>> = mutableMapOf()
+    var imports: MutableMap<String, MutableSet<String>> = mutableMapOf()
     var exports: MutableList<LuauIdentifier> = mutableListOf()
 
     fun render(): String {

@@ -1,4 +1,4 @@
-package wtf.lynn.xyz.atkdev.rbxkt.fir
+package xyz.atkdev.rbxkt.fir
 
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.FirSession

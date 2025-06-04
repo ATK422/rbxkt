@@ -12,8 +12,8 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import wtf.lynn.xyz.atkdev.rbxkt.ir.getConstructorName
-import wtf.lynn.xyz.atkdev.rbxkt.luau.LuauImportAnalyzer
+import xyz.atkdev.rbxkt.ir.getConstructorName
+import xyz.atkdev.rbxkt.luau.LuauImportAnalyzer
 import xyz.atkdev.rbxkt.luau.*
 import kotlin.math.exp
 
