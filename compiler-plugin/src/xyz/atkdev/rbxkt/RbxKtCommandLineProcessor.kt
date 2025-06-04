@@ -15,7 +15,7 @@ class RbxKtCommandLineProcessor() : CommandLineProcessor {
     override val pluginOptions: Collection<AbstractCliOption> = listOf(
         CliOption(
             optionName = "outputDir",
-            valueDescription = "Output directory",
+            valueDescription = "<path>",
             description = "Output directory for generated files",
             required = false,
             allowMultipleOccurrences = false,

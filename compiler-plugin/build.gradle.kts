@@ -1,7 +1,13 @@
 plugins {
+    id("java-gradle-plugin")
+    `maven-publish`
     kotlin("jvm")
-    `java-test-fixtures`
     id("com.github.gmazzo.buildconfig")
+}
+
+repositories {
+    mavenLocal()
+    mavenCentral()
 }
 
 kotlin {
@@ -13,32 +19,12 @@ sourceSets {
         java.setSrcDirs(listOf("src"))
         resources.setSrcDirs(listOf("resources"))
     }
-    testFixtures {
-        java.setSrcDirs(listOf("test-fixtures"))
-    }
-    test {
-        java.setSrcDirs(listOf("test", "test-gen"))
-        resources.setSrcDirs(listOf("testResources"))
-    }
 }
 
 val annotationsRuntimeClasspath: Configuration by configurations.creating { isTransitive = false }
 
 dependencies {
     compileOnly(kotlin("compiler"))
-
-    testFixturesApi(kotlin("test-junit5"))
-    testFixturesApi(kotlin("compiler-internal-test-framework"))
-    testFixturesApi(kotlin("compiler"))
-
-    annotationsRuntimeClasspath(project(":plugin-annotations"))
-
-    // Dependencies required to run the internal test framework.
-    testRuntimeOnly("junit:junit:4.13.2")
-    testRuntimeOnly(kotlin("reflect"))
-    testRuntimeOnly(kotlin("test"))
-    testRuntimeOnly(kotlin("script-runtime"))
-    testRuntimeOnly(kotlin("annotations-jvm"))
 }
 
 buildConfig {
@@ -48,26 +34,6 @@ buildConfig {
 
     packageName(group.toString())
     buildConfigField("String", "KOTLIN_PLUGIN_ID", "\"${rootProject.group}\"")
-}
-
-tasks.test {
-    dependsOn(annotationsRuntimeClasspath)
-
-    useJUnitPlatform()
-    workingDir = rootDir
-
-    systemProperty("annotationsRuntime.classpath", annotationsRuntimeClasspath.asPath)
-
-    // Properties required to run the internal test framework.
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-stdlib", "kotlin-stdlib")
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-stdlib-jdk8", "kotlin-stdlib-jdk8")
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-reflect", "kotlin-reflect")
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-test", "kotlin-test")
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-script-runtime", "kotlin-script-runtime")
-    setLibraryProperty("org.jetbrains.kotlin.test.kotlin-annotations-jvm", "kotlin-annotations-jvm")
-
-    systemProperty("idea.ignore.disabled.plugins", "true")
-    systemProperty("idea.home.path", rootDir)
 }
 
 kotlin {

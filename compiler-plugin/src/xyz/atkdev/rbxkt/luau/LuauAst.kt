@@ -1,5 +1,7 @@
 package xyz.atkdev.rbxkt.luau
 
+import wtf.lynn.xyz.atkdev.rbxkt.util.IndentedStringBuilder
+
 sealed interface LuauNode
 sealed interface LuauExpr : LuauNode {
     fun render(): String
@@ -26,7 +28,7 @@ data class LuauFile(val directives: List<LuauComment>, val stmts: List<LuauStmt>
         }
 
         for ((importPath, identifiers) in imports) {
-            val moduleName = importPath.substringAfterLast('.')
+            val moduleName = importPath.substringAfterLast('/')
             builder.line("local $moduleName = require($importPath)")
             for (identifier in identifiers) {
                 builder.line("local $identifier = $moduleName.$identifier")

@@ -18,4 +18,3 @@ rootProject.name = "rbxkt"
 
 include("compiler-plugin")
 include("gradle-plugin")
-include("plugin-annotations")

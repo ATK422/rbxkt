@@ -1,4 +1,4 @@
-package xyz.atkdev.rbxkt.luau
+package wtf.lynn.xyz.atkdev.rbxkt.util
 
 class IndentedStringBuilder {
     private val builder = StringBuilder()

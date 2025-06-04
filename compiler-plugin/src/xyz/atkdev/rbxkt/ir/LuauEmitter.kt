@@ -12,7 +12,10 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import wtf.lynn.xyz.atkdev.rbxkt.ir.getConstructorName
+import wtf.lynn.xyz.atkdev.rbxkt.luau.LuauImportAnalyzer
 import xyz.atkdev.rbxkt.luau.*
+import kotlin.math.exp
 
 fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
     val declarations = irFile.declarations
@@ -25,36 +28,6 @@ fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
     return exports
 }
 
-class LuauImportAnalyzer : IrElementVisitorVoid {
-    private lateinit var currentFileName: String
-    private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
-
-    fun analyze(file: IrFile): MutableMap<String, MutableList<String>> {
-        currentFileName = file.nameWithPackage
-        importsMap.clear()
-        file.accept(this, null)
-        return importsMap
-    }
-
-    override fun visitElement(element: IrElement) {
-        val fqName = when (element) {
-            is IrCall -> element.symbol.owner.fqNameWhenAvailable?.asString()
-            else -> null
-        }
-
-        if (fqName != null && fqName != currentFileName) {
-            val parts = fqName.split('.')
-            val identifier = parts.last()
-            val path = parts.dropLast(1).joinToString(".")
-
-            val identifiers = importsMap.getOrPut(path) { mutableListOf() }
-            identifiers.add(identifier)
-        }
-
-        element.acceptChildren(this, null)
-    }
-}
-
 class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNode, Nothing?> {
     private lateinit var currentClass: IrClass
 
@@ -63,18 +36,6 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             return LuauExprStmt(node)
         }
         return node as LuauStmt
-    }
-
-    private fun getConstructorName(constructor: IrConstructor): String {
-        return if (constructor.isPrimary) {
-            "constructor"
-        } else {
-            "from${
-                constructor.valueParameters.joinToString("And") {
-                    it.name.asString().replaceFirstChar { it.uppercase() }
-                }
-            }"
-        }
     }
 
     fun emitFile(irFile: IrFile): LuauFile {
@@ -135,33 +96,30 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             val property = owner.correspondingPropertySymbol?.owner!!
             val isSetter = owner == property.setter
             val isGetter = owner == property.getter
+            var receiverName = (expression.dispatchReceiver as IrValueAccessExpression).symbol.owner.name.asString()
+            if (receiverName == "<this>") {
+                receiverName = "self"
+            }
 
-
-            // TODO: remove hardcoded self because that just not correct but i'm lazy
             if (isSetter) {
                 val ignore = property.setter?.body?.statements?.first() is IrReturn
-                if (ignore) {
-                    val prop = name.removePrefix("<set-").removeSuffix(">")
-                    val value = args[0]
-                    return LuauAssign("self.$prop", value)
+                val prop = name.removePrefix("<set-").removeSuffix(">")
+                val value = args[0]
+                return if (ignore) {
+                    LuauAssign("$receiverName.$prop", value)
+                } else {
+                    LuauCall("$receiverName.$prop", listOf(value))
                 }
             } else if (isGetter) {
                 val ignore = property.getter?.body?.statements?.first() is IrReturn
-                if (ignore) {
-                    val prop = name.removePrefix("<get-").removeSuffix(">")
-                    return LuauIdentifier("self.$prop")
+                val prop = name.removePrefix("<get-").removeSuffix(">")
+                return if (ignore) {
+                    LuauIdentifier("$receiverName.$prop")
+                } else {
+                    LuauCall("$receiverName.$prop", listOf())
                 }
             }
         }
-
-//        if (name.startsWith("<set-")) {
-//            val prop = name.removePrefix("<set-").removeSuffix(">")
-//            val value = args[0]
-//            return LuauAssign("self.$prop", value)
-//        } else if (name.startsWith("<get-")) {
-//            val prop = name.removePrefix("<get-").removeSuffix(">")
-//            return LuauIdentifier("self.$prop")
-//        }
 
         if (expression.dispatchReceiver != null) {
             val symbol = expression.dispatchReceiver?.javaClass
