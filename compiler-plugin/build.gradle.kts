@@ -3,6 +3,7 @@ plugins {
     `maven-publish`
     kotlin("jvm")
     id("com.github.gmazzo.buildconfig")
+    kotlin("plugin.serialization") version "1.9.0"
 }
 
 repositories {
@@ -25,6 +26,7 @@ val annotationsRuntimeClasspath: Configuration by configurations.creating { isTr
 
 dependencies {
     compileOnly(kotlin("compiler"))
+    implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
 }
 
 buildConfig {

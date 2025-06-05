@@ -7,6 +7,7 @@ import org.jetbrains.kotlin.config.CommonConfigurationKeys
 import org.jetbrains.kotlin.config.CompilerConfiguration
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrar
 import org.jetbrains.kotlin.fir.extensions.FirExtensionRegistrarAdapter
+import org.jetbrains.kotlin.incremental.deleteDirectoryContents
 import xyz.atkdev.rbxkt.fir.RbxKtCheckerExtension
 import xyz.atkdev.rbxkt.ir.LuauIrGenerationExtension
 import xyz.atkdev.rbxkt.ir.PluginEnvironment

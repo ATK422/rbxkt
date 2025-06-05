@@ -24,8 +24,8 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
 }
 
 data class LuauFile(val name: String, val directives: List<LuauComment>, val stmts: List<LuauStmt>) : LuauNode {
-    var imports: MutableMap<String, MutableSet<String>> = mutableMapOf()
-    var exports: MutableList<LuauIdentifier> = mutableListOf()
+    var imports: MutableMap<String, MutableList<String>> = mutableMapOf()
+    var exports: List<LuauIdentifier> = listOf()
 
     fun render(): String {
         val builder = IndentedStringBuilder()
@@ -135,7 +135,7 @@ data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
 }
 
 data class LuauNamecall(val recv: String, val name: String, val args: List<LuauExpr>) : LuauExpr {
-    override fun render() = ""
+    override fun render() = "$recv:$name(${args.joinToString(", ") { it.render() }})"
     override fun display(builder: IndentedStringBuilder) {
         builder.line("LuauNamecall")
         builder.indent {
@@ -145,22 +145,6 @@ data class LuauNamecall(val recv: String, val name: String, val args: List<LuauE
             builder.indent { args.forEach { it.display(builder) } }
         }
     }
-}
-
-data class LuauConstructorCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
-    override fun render() = "$name(${args.joinToString(", ") { it.render() }})"
-    override fun display(builder: IndentedStringBuilder) {
-        builder.line("LuauConstructorCall name=$name")
-        builder.indent {
-            builder.line("Arguments")
-            builder.indent { args.forEach { it.display(builder) } }
-        }
-    }
-}
-
-data class LuauConstructor(val name: String) : LuauExpr {
-    override fun render() = "$name()"
-    override fun display(builder: IndentedStringBuilder) { builder.line("LuauConstructor name=$name") }
 }
 
 data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauStmt>) : LuauExpr {
@@ -180,6 +164,30 @@ data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauSt
         builder.indent {
             builder.line("Parameters")
             builder.indent { params.forEach { it.display(builder) } }
+            builder.line("Body")
+            builder.indent { body.forEach { it.display(builder) } }
+        }
+    }
+}
+
+data class LuauBlock(val body: List<LuauStmt>): LuauExpr {
+    override fun render(): String {
+        if (body.isEmpty()) return ""
+
+        val builder = IndentedStringBuilder()
+        builder.line("do")
+        builder.indent {
+            for (stmt in body) {
+                stmt.render(builder)
+            }
+        }
+        builder.append("end")
+        return builder.toString()
+    }
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("LuauBlock")
+        builder.indent {
             builder.line("Body")
             builder.indent { body.forEach { it.display(builder) } }
         }

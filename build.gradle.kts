@@ -14,6 +14,7 @@ tasks.register("publishAllPlugins") {
         ":compiler-plugin:publishToMavenLocal",
         ":gradle-plugin:publishToMavenLocal"
     )
+
     if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
         finalizedBy("buildSample")
     }

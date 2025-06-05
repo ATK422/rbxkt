@@ -62,12 +62,12 @@ sourceSets {
 tasks.register("CompileAll") {
     group = "build"
     dependsOn(
-        tasks.named("compileSharedKotlin"),
-                 tasks.named("compileServerKotlin"),
-                 tasks.named("compileClientKotlin")
+        tasks.named("compileServerKotlin"),
+        tasks.named("compileClientKotlin"),
+        tasks.named("compileSharedKotlin")
     )
 }
 
 tasks.named("build") {
-    dependsOn(tasks.named("compileKotlin"))
+    dependsOn(tasks.named("CompileAll"))
 }

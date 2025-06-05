@@ -5,28 +5,13 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
-import org.jetbrains.kotlin.ir.overrides.isNonPrivate
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import xyz.atkdev.rbxkt.ir.getConstructorName
 import xyz.atkdev.rbxkt.luau.LuauImportAnalyzer
 import xyz.atkdev.rbxkt.luau.*
-import kotlin.math.exp
-
-fun analyzeExports(irFile: IrFile): MutableList<LuauIdentifier> {
-    val declarations = irFile.declarations
-    var exports: MutableList<LuauIdentifier> = mutableListOf()
-    for (declaration in declarations) {
-        if (declaration is IrDeclarationWithVisibility && declaration.isNonPrivate) {
-            exports.add(LuauIdentifier((declaration as IrDeclarationWithName).name.asString()))
-        }
-    }
-    return exports
-}
 
 class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNode, Nothing?> {
     private lateinit var currentClass: IrClass
@@ -48,18 +33,15 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             lowerToStmt(it.accept(this, null))
         }
 
-        val importVisitor = LuauImportAnalyzer()
         val file = LuauFile(irFile.kotlinFqName.asString(), comments, statements)
-        file.imports = importVisitor.analyze(irFile)
-        file.exports = analyzeExports(irFile)
+        file.exports = LuauExportAnalyzer.getExportsForFile(irFile)
+        file.imports = LuauImportAnalyzer.analyze(irFile)
 
         return file
     }
 
     override fun visitElement(element: IrElement, data: Nothing?): LuauNode {
         error("Unhandled element: ${element::class.simpleName}")
-        //println("Unhandled element: ${element::class.simpleName}")
-        //return null
     }
 
     override fun visitCall(expression: IrCall, data: Nothing?): LuauNode {
@@ -89,9 +71,9 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
 
             val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver, op, rhs)
+            return LuauBinaryExpr(receiver!!, op, rhs)
         } else if (isSuperCall) {
-            return LuauCall("self.super:$name", args)
+            return LuauNamecall("self.super", name, args)
         } else if (isSetterGetter) {
             val property = owner.correspondingPropertySymbol?.owner!!
             val isSetter = owner == property.setter
@@ -101,23 +83,22 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
                 receiverName = "self"
             }
 
-            if (isSetter) {
-                val ignore = property.setter?.body?.statements?.first() is IrReturn
-                val prop = name.removePrefix("<set-").removeSuffix(">")
-                val value = args[0]
-                return if (ignore) {
-                    LuauAssign("$receiverName.$prop", value)
-                } else {
-                    LuauCall("$receiverName.$prop", listOf(value))
+            val name = getSetterGetterName(owner)
+            val isDefault = isDefaultSetterGetter(owner)
+
+            if (isDefault) {
+                if (isSetter) {
+                    val value = args.first()
+                    return LuauAssign("$receiverName.$name", value)
+                } else if (isGetter) {
+                    return LuauIdentifier("$receiverName.$name")
                 }
-            } else if (isGetter) {
-                val ignore = property.getter?.body?.statements?.first() is IrReturn
-                val prop = name.removePrefix("<get-").removeSuffix(">")
-                return if (ignore) {
-                    LuauIdentifier("$receiverName.$prop")
-                } else {
-                    LuauCall("$receiverName.$prop", listOf())
+            } else {
+                var args: List<LuauExpr> = listOf()
+                if (isSetter) {
+                    args = listOf(args.first())
                 }
+                return LuauNamecall(receiverName, name, args)
             }
         }
 
@@ -176,12 +157,12 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val args = expression.valueArguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
         return if (targetClassName == "Any") {
-            LuauComment("no super", false)
+            LuauBlock(listOf())
         } else {
             if (currentClassName == targetClassName) {
-                LuauCall("return self:constructor", args)
+                LuauNamecall("self", "constructor", args)
             } else {
-                LuauCall("self.super:constructor", args)
+                LuauNamecall("self.super", "constructor", args)
             }
         }
     }
@@ -248,13 +229,13 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val memberFunctions = declaration.functions.map {
             it.accept(this, null) as LuauFunctionStmt
         }.filter {
-            it.name != "toString"
+            !it.name.startsWith("Any")
         }.toList()
 
         return LuauClass(name, memberTypes, initializer, constructors, memberFunctions)
     }
 
-    override fun visitConstructorCall(expression: IrConstructorCall, data: Nothing?): LuauConstructorCall {
+    override fun visitConstructorCall(expression: IrConstructorCall, data: Nothing?): LuauNamecall {
         val targetConstructor = expression.symbol.owner
         val className = (targetConstructor.parent as IrClass).name.asString()
         val constructorName = getConstructorName(targetConstructor)
@@ -262,7 +243,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val args = expression.valueArguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
-        return LuauConstructorCall("$className:$constructorName", args)
+        return LuauNamecall(className, constructorName, args)
     }
 
     override fun visitStringConcatenation(expression: IrStringConcatenation, data: Nothing?): LuauInterpolatedStringLiteral {
@@ -272,7 +253,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr = when(val value = expression.value) {
         is String -> LuauStringLiteral(value)
-        is Int, is UInt, is Double, is Float -> LuauNumberLiteral(value as Number)
+        is Number -> LuauNumberLiteral(value)
         is Boolean -> LuauBoolLiteral(value)
         else -> error("Unsupported constant type: ${value?.let { it::class.simpleName }}")
     }
@@ -283,9 +264,18 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         return LuauVarDecl(name, LuauTypeSolver.fromIr(declaration.type), init)
     }
 
-    override fun visitGetValue(expression: IrGetValue, data: Nothing?): LuauIdentifier {
-        val name = expression.symbol.owner.name.asString()
-        return LuauIdentifier(name)
+    override fun visitGetValue(expression: IrGetValue, data: Nothing?): LuauExpr {
+        val owner = expression.symbol.owner
+        val name = owner.name.asString()
+        val isFunction = owner.type.run {
+            isFunction()
+        }
+
+        return if (isFunction) {
+            LuauCall(name, listOf())
+        } else {
+            LuauIdentifier(name)
+        }
     }
 
     override fun visitSetValue(expression: IrSetValue, data: Nothing?): LuauAssign {
@@ -298,8 +288,4 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val args = expression.value.accept(this, data) as LuauExpr
         return LuauReturn(listOf(args))
     }
-
-//    override fun visitTypeOperator(expression: IrTypeOperatorCall, data: Nothing?): LuauBinaryExpr {
-//        return LuauBinaryExpr(expression.argument.accept(this, data) as LuauExpr, expression.operator.toString(), expression.typeOperand.)
-//    }
 }
