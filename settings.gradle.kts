@@ -5,7 +5,7 @@ pluginManagement {
         maven("https://maven.pkg.jetbrains.space/kotlin/p/kotlin/bootstrap")
         mavenLocal()
     }
-    
+
 }
 
 dependencyResolutionManagement {
@@ -19,4 +19,7 @@ rootProject.name = "rbxkt"
 
 include("compiler-plugin")
 include("gradle-plugin")
-include("sample")
+if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
+    includeBuild("sample")
+}
+

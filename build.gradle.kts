@@ -8,3 +8,19 @@ allprojects {
     group = "xyz.atkdev.rbxkt"
     version = "1.0.0"
 }
+
+tasks.register("publishAllPlugins") {
+    dependsOn(
+        ":compiler-plugin:publishToMavenLocal",
+        ":gradle-plugin:publishToMavenLocal"
+    )
+    if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
+        finalizedBy("buildSample")
+    }
+}
+
+if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
+    tasks.register("buildSample") {
+        dependsOn(gradle.includedBuild("sample").task(":CompileAll"))
+    }
+}
