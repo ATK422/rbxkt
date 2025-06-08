@@ -37,11 +37,9 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
 
         var containsClientModules = false
         val services = imports.keys.mapToSetOrEmpty {
-            if (it.contains("src/")) {
-                val type = it.substringAfter("src/").substringBefore("/").lowercase()
-                if (type == "client") containsClientModules = true
-                return@mapToSetOrEmpty nameToService(type)
-            } else error("Incorrect project structure, requires src folder")
+            val type = it.substringAfter("src/").substringBefore("/").lowercase()
+            if (type == "client") containsClientModules = true
+            return@mapToSetOrEmpty nameToService(type)
         }
 
         services.forEach { service ->
