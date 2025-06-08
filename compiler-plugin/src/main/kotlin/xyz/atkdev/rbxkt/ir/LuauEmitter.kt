@@ -71,7 +71,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
 
             val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver!!, op, rhs)
+            return LuauBinaryExpr(receiver, op, rhs)
         } else if (isSuperCall) {
             return LuauNamecall("self.super", name, args)
         } else if (isSetterGetter) {
@@ -110,15 +110,16 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             return LuauCall(owner.name.asString(), args)
         }
 
+        //possibly error on normal print
+        if (name == "println" && owner.getPackageFragment().packageFqName.asString() == "kotlin.io") return LuauCall("print", args)
+
         return LuauCall(name, args)
     }
 
     override fun visitFunction(declaration: IrFunction, data: Nothing?): LuauFunctionStmt {
         var name = declaration.name.asString()
         if (declaration.dispatchReceiverParameter != null) {
-            val receiverName = declaration.dispatchReceiverParameter?.type?.classOrNull?.owner?.let {
-                (it as? IrClass)?.name?.asString()
-            }
+            val receiverName = declaration.dispatchReceiverParameter?.type?.classOrNull?.owner?.name?.asString()
             name = "$receiverName:$name"
         }
         val typeParams = declaration.typeParameters.map {

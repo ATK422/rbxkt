@@ -4,6 +4,7 @@ import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.incremental.deleteDirectoryContents
 import org.jetbrains.kotlin.ir.backend.js.utils.nameWithoutExtension
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
 import org.jetbrains.kotlin.ir.declarations.path
@@ -26,39 +27,41 @@ class LuauIrGenerationExtension(
         moduleFragment: IrModuleFragment,
         pluginContext: IrPluginContext
     ) {
+        val files = moduleFragment.files
+        if (files.isEmpty()) return
+
         PluginEnvironment.irPluginContext = pluginContext
         PluginEnvironment.irModuleFragment = moduleFragment
 
         LuauTypeSolver.irContext = pluginContext
-        LuauExportAnalyzer.analyze(outputDir, moduleFragment.files)
+        LuauExportAnalyzer.analyze(outputDir, files)
 
         outputDir.mkdirs()
 
-        val deleted = mutableSetOf<String>()
+        files.first().run {
+            if (!path.contains("src/")) error("Incorrect project structure, requires src folder")
 
-        moduleFragment.files.forEach { irFile ->
+            File(
+                outputDir,
+                path.substringAfter("src/").substringBefore("/")
+            ).deleteDirectoryContents()
+        }
+
+        files.forEach { irFile ->
             val emitter = LuauEmitter(pluginContext)
             val luauFile = emitter.emitFile(irFile)
             val code = luauFile.render()
 
-            if (!irFile.path.contains("src/")) error("Incorrect project structure, requires src folder")
-
-            val localOutputDir = File(outputDir, irFile.path.substringAfter("src/").substringBeforeLast("/"))
-            localOutputDir.mkdirs()
-            if (localOutputDir.path !in deleted) {
-                localOutputDir.deleteRecursively()
-                deleted.add(localOutputDir.path)
-            }
+            val relativeDir = File(outputDir, irFile.path.substringAfter("src/").substringBeforeLast("/"))
+            relativeDir.mkdirs()
 
             val astBuilder = IndentedStringBuilder()
             luauFile.display(astBuilder)
 
-            val astOut = File(localOutputDir, irFile.nameWithoutExtension + ".luauast")
-            val luauOut = File(localOutputDir, irFile.nameWithoutExtension + ".luau")
-            val irOut = File(localOutputDir, irFile.nameWithoutExtension + ".ir")
-            luauOut.writeText(code)
-            astOut.writeText(astBuilder.toString())
-            irOut.writeText(irFile.dump())
+            val fileName = irFile.nameWithoutExtension
+            File(relativeDir, "$fileName.luau").writeText(code)
+            File(relativeDir,  "$fileName.luauast").writeText(astBuilder.toString())
+            File(relativeDir, "$fileName.ir").writeText(irFile.dump())
         }
     }
 }

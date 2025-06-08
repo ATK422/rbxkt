@@ -244,7 +244,7 @@ data class LuauClass(
     override fun render(builder: IndentedStringBuilder) {
         builder.line("type $name = {")
         builder.indent {
-            builder.line("${memberTypes.joinToString(",\n") { it }}")
+            builder.line(memberTypes.joinToString(",\n") { it })
         }
         builder.line("}")
 
