@@ -1,4 +1,4 @@
-package xyz.atk.dev.rbxkt.sample.shared
+package xyz.atkdev.rbxkt.sample.shared
 
 fun doSomethingShared() {
     println("test")

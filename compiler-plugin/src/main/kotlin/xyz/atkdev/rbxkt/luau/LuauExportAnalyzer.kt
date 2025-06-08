@@ -33,6 +33,7 @@ object ExportStore {
             }
         )
         file.parentFile.mkdirs()
+        file.delete()
         file.writeText(Json.encodeToString(exportMap))
     }
 
@@ -62,10 +63,12 @@ object LuauExportAnalyzer {
         file = File(path, "exports.json")
 
         pkgExports = ExportStore.load(file!!)
-        for (irFile in irFiles) {
-            val pkgName = irFile.packageFqName.asString()
-            val fileExports = analyzeFile(irFile)
-            pkgExports[pkgName] = fileExports
+        irFiles.forEach {
+            val pkgName = it.packageFqName.asString()
+            val fileExports = analyzeFile(it)
+            pkgExports
+                .getOrPut(pkgName) { mutableMapOf() }
+                .putAll(fileExports)
         }
 
         ExportStore.save(file!!, pkgExports)
@@ -79,14 +82,17 @@ object LuauExportAnalyzer {
 
     fun getExportsForFile(irFile: IrFile): List<LuauIdentifier> {
         val pkgName = irFile.packageFqName.asString()
-        val fileExports = pkgExports[pkgName]?: return listOf()
-        return fileExports.keys.map { LuauIdentifier(it) }
+        val fileExports = pkgExports[pkgName] ?: return listOf()
+        return fileExports
+            .filter { (_, filePath) -> filePath == irFile.path }
+            .keys
+            .map { LuauIdentifier(it) }
     }
 
     private fun analyzeFile(irFile: IrFile): MutableMap<String, String> {
         val declarations = irFile.declarations
         val filePath = irFile.path
-        var fileExports: MutableMap<String, String> = mutableMapOf()
+        val fileExports: MutableMap<String, String> = mutableMapOf()
 
         for (declaration in declarations) {
             if (declaration is IrDeclarationWithVisibility && declaration.isNonPrivate) {

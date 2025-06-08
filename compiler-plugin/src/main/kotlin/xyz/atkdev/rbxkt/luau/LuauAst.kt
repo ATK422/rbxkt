@@ -1,5 +1,6 @@
 package xyz.atkdev.rbxkt.luau
 
+import org.jetbrains.kotlin.utils.mapToSetOrEmpty
 import xyz.atkdev.rbxkt.util.IndentedStringBuilder
 
 sealed interface LuauNode {
@@ -34,12 +35,27 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
             builder.line(directive.render())
         }
 
-        for ((importPath, identifiers) in imports) {
-            val moduleName = importPath.substringAfterLast('/')
-            builder.line("local $moduleName = require($importPath)")
-            for (identifier in identifiers) {
-                builder.line("local $identifier = $moduleName.$identifier")
-            }
+        var containsClientModules = false
+        val services = imports.keys.mapToSetOrEmpty {
+            if (it.contains("src/")) {
+                val type = it.substringAfter("src/").substringBefore("/").lowercase()
+                if (type == "client") containsClientModules = true
+                return@mapToSetOrEmpty nameToService(type)
+            } else error("Incorrect project structure, requires src folder")
+        }
+
+        services.forEach { service ->
+            builder.line("local $service = game:GetService(\"$service\")")
+            builder.line("local ${service}Modules = ${service}.rbxkt.Modules")
+        }
+
+        imports.forEach {importPath, identifiers ->
+            val localPath = importPath.substringAfter("src/").substringBefore(".")
+            val moduleName = localPath.substringAfterLast('/')
+            val serviceName = nameToService(localPath.substringBefore("/").lowercase())
+            val robloxPath = localPath.substringAfter('/').replace("/", ".")
+            builder.line("local $moduleName = require(${serviceName}Modules.$robloxPath)")
+            identifiers.forEach { builder.line("local $it = $moduleName.$it") }
         }
 
         for (stmt in stmts) {
@@ -65,6 +81,8 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
             builder.indent { directives.forEach { it.display(builder) } }
             builder.line("statements")
             builder.indent { stmts.forEach { it.display(builder) } }
+            builder.line("exports")
+            builder.indent { exports.forEach { it.display(builder) } }
         }
     }
 }

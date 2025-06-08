@@ -15,11 +15,11 @@ import xyz.atkdev.rbxkt.luau.LuauExportAnalyzer.pkgExports
 
 object LuauImportAnalyzer : IrElementVisitorVoid {
     var srcRoot = "D:/Projects/IntelliJ/rbxkt-example"
-    private var currentPkgName: String? = null
+    lateinit var currentFilePath: String
     private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
 
     fun analyze(file: IrFile): MutableMap<String, MutableList<String>> {
-        currentPkgName = file.getPackageFragment()?.packageFqName!!.asString()
+        currentFilePath = file.path
         file.accept(this, null)
         return importsMap
     }
@@ -28,10 +28,8 @@ object LuauImportAnalyzer : IrElementVisitorVoid {
         element.acceptChildren(this, null)
 
         if (element is IrFile) return
-        if (currentPkgName == null) return
 
-        var pkgName: String? = null
-        val exportName = when(element) {
+        val (exportName, pkgName) = when(element) {
             is IrCall -> {
                 if (element.superQualifierSymbol != null) return
                 if (element.dispatchReceiver != null) return
@@ -39,30 +37,35 @@ object LuauImportAnalyzer : IrElementVisitorVoid {
                 val owner = element.symbol.owner
                 val name = owner.kotlinFqName.asString().split(".").last()
 
-                pkgName = owner.getPackageFragment().packageFqName!!.asString()
-                name
+                name to owner.getPackageFragment().packageFqName.asString()
             }
-            else -> null
+            else -> null to null
         }
 
-        if (pkgName == null) return
-        if (exportName == null) return
+        if (pkgName == null
+            || exportName == null
+            || pkgName.startsWith("kotlin")) return
+
         val filePath = LuauExportAnalyzer.getFilePathByExportAndPkg(
             exportName,
             pkgName
         )?: return
 
+        if (currentFilePath == filePath) return
+
         PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, filePath)
         PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, pkgName)
-        PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, currentPkgName!!)
+        PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, currentFilePath!!)
 
-        if (
-            !pkgName.startsWith("kotlin") &&
-            currentPkgName!! != pkgName
-        ) {
-            val path = filePath.replace(srcRoot, "@").removeSuffix(".kt")
-            val identifiers = importsMap.getOrPut(path) { mutableListOf() }
-            identifiers.add(exportName)
-        }
+        val path = filePath.replace(srcRoot, "@").removeSuffix(".kt")
+        val identifiers = importsMap.getOrPut(path) { mutableListOf() }
+        identifiers.add(exportName)
     }
+}
+
+fun nameToService(name: String): String = when (name) {
+    "shared" -> "ReplicatedStorage"
+    "client" -> "ReplicatedStorage"
+    "server" -> "ServerScriptService"
+    else -> error("Expected name for service")
 }
