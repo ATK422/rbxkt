@@ -13,6 +13,19 @@ sealed interface LuauStmt : LuauNode {
     fun render(builder: IndentedStringBuilder)
 }
 
+data class LuauStmtExpr(val expr: LuauStmt) : LuauExpr {
+    override fun render(): String {
+        val builder = IndentedStringBuilder()
+        expr.render(builder)
+        return builder.toString()
+    }
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("LuauExprStmt")
+        builder.indent { expr.display(builder) }
+    }
+}
+
 data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
         builder.line(expr.render())

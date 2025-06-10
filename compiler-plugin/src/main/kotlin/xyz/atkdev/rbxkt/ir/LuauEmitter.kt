@@ -71,7 +71,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             }
 
             val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver, op, rhs)
+            return LuauBinaryExpr(receiver!!, op, rhs)
         } else if (isSuperCall) {
             return LuauNamecall("self.super", name, args)
         } else if (isSetterGetter) {
@@ -147,8 +147,8 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         return LuauLambdaExpr(params, body)
     }
 
-    override fun visitInstanceInitializerCall(expression: IrInstanceInitializerCall, data: Nothing?): LuauCall {
-        return LuauCall("self:init", listOf())
+    override fun visitInstanceInitializerCall(expression: IrInstanceInitializerCall, data: Nothing?): LuauNamecall {
+        return LuauNamecall("self", "init", listOf())
     }
 
     override fun visitDelegatingConstructorCall(expression: IrDelegatingConstructorCall, data: Nothing?): LuauExpr {
@@ -161,7 +161,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
             LuauBlock(listOf())
         } else {
             if (currentClassName == targetClassName) {
-                LuauNamecall("self", "constructor", args)
+                LuauStmtExpr(LuauReturn(listOf(LuauNamecall("self", "constructor", args))))
             } else {
                 LuauNamecall("self.super", "constructor", args)
             }

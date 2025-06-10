@@ -9,8 +9,31 @@ allprojects {
     version = "1.0.0"
 }
 
+tasks.register("buildAll") {
+    dependsOn(
+        ":plugin-annotations:build",
+        ":compiler-plugin:build",
+        ":gradle-plugin:build"
+    )
+}
+
 tasks.register("publishAllPlugins") {
     dependsOn(
+        "buildAll",
+        ":plugin-annotations:publish",
+        ":compiler-plugin:publish",
+        ":gradle-plugin:publish"
+    )
+
+    if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
+        finalizedBy("buildSample")
+    }
+}
+
+tasks.register("publishAllPluginsLocal") {
+    dependsOn(
+        "buildAll",
+        ":plugin-annotations:publishToMavenLocal",
         ":compiler-plugin:publishToMavenLocal",
         ":gradle-plugin:publishToMavenLocal"
     )

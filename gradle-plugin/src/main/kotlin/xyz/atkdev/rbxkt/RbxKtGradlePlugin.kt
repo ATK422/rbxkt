@@ -1,5 +1,6 @@
 package xyz.atkdev.rbxkt
 
+import xyz.atkdev.rbxkt.BuildConfig.ANNOTATIONS_LIBRARY_COORDINATES
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
@@ -9,12 +10,12 @@ import org.jetbrains.kotlin.gradle.plugin.SubpluginOption
 
 @Suppress("unused") // Used via reflection.
 class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
-    override fun apply(project: Project) {
-        project.extensions.create("rbxkt", RbxKtGradleExtension::class.java)
-        project.afterEvaluate {
-            val ext = project.extensions.getByType(RbxKtGradleExtension::class.java)
+    override fun apply(target: Project) {
+        target.extensions.create("rbxkt", RbxKtGradleExtension::class.java)
+        target.afterEvaluate {
+            val ext = target.extensions.getByType(RbxKtGradleExtension::class.java)
             if (!ext.outputDir.isPresent) {
-                ext.outputDir.set(project.layout.buildDirectory.dir("out").get().asFile.absolutePath)
+                ext.outputDir.set(target.layout.buildDirectory.dir("out").get().asFile.absolutePath)
             }
         }
     }
@@ -33,6 +34,10 @@ class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
         kotlinCompilation: KotlinCompilation<*>
     ): Provider<List<SubpluginOption>> {
         val project = kotlinCompilation.target.project
+
+        kotlinCompilation.dependencies {
+            implementation(ANNOTATIONS_LIBRARY_COORDINATES)
+        }
 
         return project.provider {
             val extension = project.extensions.getByType(RbxKtGradleExtension::class.java)

@@ -10,6 +10,7 @@ repositories {
     mavenLocal()
     mavenCentral()
 }
+
 kotlin {
     jvmToolchain(21)
 }
@@ -39,6 +40,16 @@ java {
 }
 
 sourceSets {
+    named("main") {
+        kotlin.setSrcDirs(emptyList<SourceDirectorySet>())
+        resources.setSrcDirs(emptyList<SourceDirectorySet>())
+    }
+
+    named("test") {
+        kotlin.setSrcDirs(emptyList<SourceDirectorySet>())
+        resources.setSrcDirs(emptyList<SourceDirectorySet>())
+    }
+
     // 1) Shared code, visible to both server & client
     val shared by creating {
         kotlin.srcDir("src/shared/")

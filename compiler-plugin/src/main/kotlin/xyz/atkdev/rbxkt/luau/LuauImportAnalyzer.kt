@@ -1,20 +1,12 @@
 package xyz.atkdev.rbxkt.luau
 
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
-import org.jetbrains.kotlin.ir.expressions.IrCall
-import org.jetbrains.kotlin.ir.expressions.IrConstructorCall
-import org.jetbrains.kotlin.ir.util.getPackageFragment
-import org.jetbrains.kotlin.ir.util.kotlinFqName
+import org.jetbrains.kotlin.ir.expressions.*
+import org.jetbrains.kotlin.ir.util.*
 import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
-import org.jetbrains.kotlin.name.FqName
-import xyz.atkdev.rbxkt.ir.PluginEnvironment
-import xyz.atkdev.rbxkt.ir.getConstructorName
-import xyz.atkdev.rbxkt.luau.LuauExportAnalyzer.pkgExports
 
 object LuauImportAnalyzer : IrElementVisitorVoid {
-    var srcRoot = "D:/Projects/IntelliJ/rbxkt-example"
     lateinit var currentFilePath: String
     private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
 
@@ -53,12 +45,7 @@ object LuauImportAnalyzer : IrElementVisitorVoid {
 
         if (currentFilePath == filePath) return
 
-        PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, filePath)
-        PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, pkgName)
-        PluginEnvironment.logger.report(CompilerMessageSeverity.WARNING, currentFilePath!!)
-
-        val path = filePath.replace(srcRoot, "@").removeSuffix(".kt")
-        val identifiers = importsMap.getOrPut(path) { mutableListOf() }
+        val identifiers = importsMap.getOrPut(filePath) { mutableListOf() }
         identifiers.add(exportName)
     }
 }

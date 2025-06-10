@@ -1,8 +1,8 @@
 plugins {
     id("java-gradle-plugin")
-    `maven-publish`
-    kotlin("jvm")
+    id("maven-publish")
     id("com.github.gmazzo.buildconfig")
+    kotlin("jvm")
     kotlin("plugin.serialization") version "1.9.0"
 }
 
@@ -21,8 +21,6 @@ sourceSets {
         resources.setSrcDirs(listOf("resources"))
     }
 }
-
-val annotationsRuntimeClasspath: Configuration by configurations.creating { isTransitive = false }
 
 dependencies {
     compileOnly(kotlin("compiler"))
@@ -43,14 +41,4 @@ kotlin {
         optIn.add("org.jetbrains.kotlin.compiler.plugin.ExperimentalCompilerApi")
         optIn.add("org.jetbrains.kotlin.ir.symbols.UnsafeDuringIrConstructionAPI")
     }
-}
-
-fun Test.setLibraryProperty(propName: String, jarName: String) {
-    val path = project.configurations
-        .testRuntimeClasspath.get()
-        .files
-        .find { """$jarName-\d.*jar""".toRegex().matches(it.name) }
-        ?.absolutePath
-        ?: return
-    systemProperty(propName, path)
 }
