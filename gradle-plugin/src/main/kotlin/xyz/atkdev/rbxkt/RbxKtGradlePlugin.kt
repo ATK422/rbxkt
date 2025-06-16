@@ -1,6 +1,6 @@
 package xyz.atkdev.rbxkt
 
-import xyz.atkdev.rbxkt.BuildConfig.ANNOTATIONS_LIBRARY_COORDINATES
+import xyz.atkdev.rbxkt.BuildConfig.API_COORDINATES
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
@@ -36,7 +36,7 @@ class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
         val project = kotlinCompilation.target.project
 
         kotlinCompilation.dependencies {
-            implementation(ANNOTATIONS_LIBRARY_COORDINATES)
+            implementation(API_COORDINATES)
         }
 
         return project.provider {

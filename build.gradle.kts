@@ -11,7 +11,7 @@ allprojects {
 
 tasks.register("buildAll") {
     dependsOn(
-        ":plugin-annotations:build",
+        ":plugin-api:build",
         ":compiler-plugin:build",
         ":gradle-plugin:build"
     )
@@ -20,7 +20,7 @@ tasks.register("buildAll") {
 tasks.register("publishAllPlugins") {
     dependsOn(
         "buildAll",
-        ":plugin-annotations:publish",
+        ":plugin-api:publish",
         ":compiler-plugin:publish",
         ":gradle-plugin:publish"
     )
@@ -33,7 +33,7 @@ tasks.register("publishAllPlugins") {
 tasks.register("publishAllPluginsLocal") {
     dependsOn(
         "buildAll",
-        ":plugin-annotations:publishToMavenLocal",
+        ":plugin-api:publishToMavenLocal",
         ":compiler-plugin:publishToMavenLocal",
         ":gradle-plugin:publishToMavenLocal"
     )

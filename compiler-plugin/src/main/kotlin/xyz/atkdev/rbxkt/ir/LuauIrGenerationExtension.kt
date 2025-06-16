@@ -2,7 +2,6 @@ package xyz.atkdev.rbxkt.ir
 
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
-import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
 import org.jetbrains.kotlin.incremental.deleteDirectoryContents
 import org.jetbrains.kotlin.ir.backend.js.utils.nameWithoutExtension
@@ -44,7 +43,7 @@ class LuauIrGenerationExtension(
             File(
                 outputDir,
                 path.substringAfter("src/").substringBefore("/")
-            ).deleteDirectoryContents()
+            ).takeIf { it.isDirectory }?.deleteDirectoryContents()
         }
 
         files.forEach { irFile ->

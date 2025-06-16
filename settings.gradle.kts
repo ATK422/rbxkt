@@ -21,7 +21,7 @@ dependencyResolutionManagement {
 
 rootProject.name = "rbxkt"
 
-include("plugin-annotations")
+include("plugin-api")
 include("compiler-plugin")
 include("gradle-plugin")
 if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
