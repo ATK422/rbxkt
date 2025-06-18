@@ -10,6 +10,7 @@ dependencies {
     implementation("io.ktor:ktor-client-cio:3.1.3")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
     implementation("com.charleskorn.kaml:kaml:0.81.0")
+    implementation("com.squareup:kotlinpoet:2.2.0")
 }
 
 repositories {
@@ -20,6 +21,10 @@ repositories {
 sourceSets {
     val api by creating {
         kotlin.srcDir("src/api/")
+    }
+    named("main") {
+        compileClasspath += api.output
+        runtimeClasspath += api.output
     }
 }
 
