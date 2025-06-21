@@ -94,15 +94,19 @@ internal data class ClassSchema(
     }
 }
 
+internal interface DocsFile {
+    val name: String
+}
+
 @Serializable
 internal data class EnumFile(
-    val name: String,
+    override val name: String,
     val summary: String,
     val tags: List<String>,
     @SerialName("deprecation_message")
     val deprecationMessage: String,
     val items: List<EnumValue>
-) {
+): DocsFile {
     @Serializable
     internal data class EnumValue(
         val name: String,
@@ -155,7 +159,7 @@ internal data class Property(
 
 @Serializable
 internal data class DataTypeFile(
-    val name: String,
+    override val name: String,
     val summary: String,
     val tags: List<String>,
     @SerialName("deprecation_message")
@@ -166,7 +170,7 @@ internal data class DataTypeFile(
     val methods: List<Method>? = null,
     @SerialName("math_operations")
     val mathOperations: List<DataTypeMathOperation>? = null,
-) {
+): DocsFile {
     @Serializable
     internal data class DataTypeConstructor(
         val name: String,
@@ -205,7 +209,7 @@ internal data class DataTypeFile(
 
 @Serializable
 internal data class ClassFile(
-    val name: String,
+    override val name: String,
     val summary: String,
     val tags: List<String>,
     @SerialName("deprecation_message")
@@ -215,7 +219,7 @@ internal data class ClassFile(
     val methods: List<Method>? = null,
     val events: List<ClassEvent>? = null,
 //    val callbacks: List<ClassCallback> = null,
-) {
+): DocsFile {
     @Serializable
     internal data class ClassEvent(
         val name: String,
@@ -359,6 +363,14 @@ internal class RobloxTypeGenerator() {
     
     private suspend fun listAndReadFiles(url: String) = readFiles(listFiles(url))
 
+    private inline fun <reified T : DocsFile> processYamlFiles(files: List<String>): Map<String, T> {
+        return files.associate {
+            val file = yaml.decodeFromString<T>(it)
+            file.name to file
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
     internal suspend fun generate() {
         val corrections = getCorrections()
 
@@ -439,7 +451,7 @@ internal class RobloxTypeGenerator() {
             )
         }
 
-        return combinedNames.associateWith { AnnotationSpec.builder(ClassName("xyz.atkdev.rbxkt.api", it)).build() }
+        return combinedNames.associateWith { AnnotationSpec.builder(ClassName(PACKAGE_NAME, it)).build() }
     }
 
     private fun generateEnums(files: Map<String, EnumFile>, fileSpec: FileSpec.Builder) {
@@ -482,7 +494,7 @@ internal class RobloxTypeGenerator() {
                 if (funcName != funcName.toCamelCase()) addLuauName(funcBuilder, funcName)
                 if (!isDefaultBuilder) funcBuilder.addModifiers(KModifier.EXTERNAL)
                 constructor.parameters?.let { funcBuilder.addParameters(it.map(::generateParameter)) }
-                if (!isDefaultBuilder) funcBuilder.returns(ClassName("xyz.atkdev.rbxkt.api", file.name))
+                if (!isDefaultBuilder) funcBuilder.returns(datatypes[name]!!)
 
                 addSummary(funcBuilder, constructor.summary)
                 addDeprecation(funcBuilder, constructor.deprecationMessage)
@@ -518,9 +530,8 @@ internal class RobloxTypeGenerator() {
                 val operation = operatorToString(mathOperation.operation)
                 val mathBuilder = FunSpec.builder(operation)
                     .addModifiers(KModifier.EXTERNAL)
-                    .receiver(ClassName("xyz.atkdev.rbxkt.api", mathOperation.typeA))
-                    .addParameter("other", getBaseLuauType(mathOperation.typeB))
-                    .returns(ClassName("xyz.atkdev.rbxkt.api", mathOperation.returnType))
+                    .addParameter("other", typeOf(mathOperation.typeB))
+                    .returns(typeOf(mathOperation.returnType))
 
                 if (operation != "floorDiv") mathBuilder.addModifiers(KModifier.OPERATOR)
 
@@ -563,10 +574,13 @@ internal class RobloxTypeGenerator() {
 
             file.properties?.let { prop -> interfaceBuilder.addProperties(prop.map { generateProperty(it, false) } ) }
 
-            file.methods?.let { methods -> interfaceBuilder.addFunctions(methods.flatMap { generateMethod(file.name, it, companionBuilder, false) }) }
+            file.methods?.let { methods -> interfaceBuilder.addFunctions(methods.flatMap { generateMethod(classes[name]!!, it, companionBuilder, false) }) }
 
             file.events?.forEach { event ->
-                val propertyBuilder = PropertySpec.builder(event.name.substringAfter("."), ClassName("xyz.atkdev.rbxkt.api", "RBXScriptConnection"))
+                val eventName = event.name.substringAfter(".")
+                val propertyBuilder = PropertySpec.builder(eventName.toCamelCase(), datatypes["RBXScriptConnection"]!!)
+                if (eventName != eventName.toCamelCase()) addLuauName(propertyBuilder, eventName)
+                if (eventName == "Changed" && name != "Object") propertyBuilder.addModifiers(KModifier.OVERRIDE)
                 addSummary(propertyBuilder, event.summary)
                 addDeprecation(propertyBuilder, event.deprecationMessage)
                 addTags(propertyBuilder, event.tags)
@@ -574,7 +588,7 @@ internal class RobloxTypeGenerator() {
             }
 
             file.inherits?.forEach {
-                interfaceBuilder.addSuperinterface(ClassName("xyz.atkdev.rbxkt.api", if (it == "Instance") "Instance" else "I${it}"))
+                interfaceBuilder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${it}"))
             }
 
             if (companionBuilder.propertySpecs.isNotEmpty() || companionBuilder.funSpecs.isNotEmpty() || companionBuilder.typeSpecs.isNotEmpty()) interfaceBuilder.addType(companionBuilder.build())
@@ -583,8 +597,8 @@ internal class RobloxTypeGenerator() {
                 interfaceBuilder.addFunction(
                     FunSpec.builder("get")
                         .addParameter("name", String::class)
-                        .addModifiers(KModifier.OPERATOR)
-                        .returns(ClassName("xyz.atkdev.rbxkt.api", "Instance"))
+                        .addModifiers(KModifier.OPERATOR, KModifier.ABSTRACT)
+                        .returns(classes["Instance"]!!.copy(nullable = true))
                         .build()
                 )
             }
@@ -610,18 +624,20 @@ internal class RobloxTypeGenerator() {
             val otherNames = iface
                 .superinterfaces
                 .keys
-                .map { (it as ClassName).simpleName.replaceFirst(Regex("I(?=[A-Z])"), "") }
+                .map { (it as ClassName).simpleName.replaceFirst("I", "") }
+                .filterNot { it == "Instance" }
                 .map { getInterfaces(it) }
                 .flatten()
-            return setOf(iface.name!!.replaceFirst(Regex("I(?=[A-Z])"), "")) + otherNames
+            return setOf(iface.name!!.replaceFirst("I", "")) + otherNames
         }
 
-        files.forEach { yamlFile ->
-            val file = yaml.decodeFromString<ClassFile>(yamlFile)
-            if (file.tags.contains("NotCreatable") && !file.tags.contains("Service")) return@forEach
+        files.forEach { (name, file) ->
+            if (name == "Studio") return@forEach
+            val builder = if (file.tags.contains("Service")) TypeSpec.objectBuilder(name) else TypeSpec.classBuilder(name)
 
-            val builder = if (file.tags.contains("Service")) TypeSpec.objectBuilder(file.name) else TypeSpec.classBuilder(file.name)
-            builder.addSuperinterface(ClassName("xyz.atkdev.rbxkt.api", "I${file.name}"))
+            builder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${name}"))
+            if (name != "Instance") builder.superclass(classes["Instance"]!!)
+            else builder.addModifiers(KModifier.OPEN)
 
             getInterfaces(name).forEach { ifaceName ->
                 val iface = interfaces[ifaceName]!!
@@ -652,11 +668,11 @@ internal class RobloxTypeGenerator() {
                 }
             }
 
-            if (!file.tags.contains("NotCreatable") && !file.tags.contains("Service")) {
+            if (!file.tags.contains("Service")) {
                 builder.addFunction(
                     FunSpec.constructorBuilder()
                         .addParameter("builder", LambdaTypeName.get(
-                            ClassName("xyz.atkdev.rbxkt.api", file.name),
+                            classes[name]!!,
                             emptyList(),
                             UNIT)
                         )
@@ -781,7 +797,7 @@ internal class RobloxTypeGenerator() {
     }
 
     private fun generateEvent(event: ClassFile.ClassEvent, initialize: Boolean = true): PropertySpec {
-        val propertyBuilder = PropertySpec.builder(event.name.substringAfter("."), ClassName("xyz.atkdev.rbxkt.api", "RBXScriptConnection"))
+        val propertyBuilder = PropertySpec.builder(event.name.substringAfter("."), ClassName(PACKAGE_NAME, "RBXScriptConnection"))
         if (initialize) propertyBuilder.initializer("TODO()")
 
         addSummary(propertyBuilder, event.summary)
@@ -850,7 +866,7 @@ internal class RobloxTypeGenerator() {
             val returnClass = generateReturnClass(methodName, method.returns)
             companion.addType(returnClass)
             funcBuilder.returns(
-                ClassName("xyz.atkdev.rbxkt.api", className)
+                className
                     .nestedClass("Companion")
                     .nestedClass(returnClass.name!!))
         } else if (method.returns.size == 1 && method.returns[0].type != "()") {
@@ -917,19 +933,19 @@ internal class RobloxTypeGenerator() {
             .replace(" | nil", "")
 
         var typeName: TypeName = when (cleanName) {
-            "number" -> Number::class.asClassName()
-            "string" -> String::class.asClassName()
+            "number", "int64", "int", "float", "double" -> Number::class.asClassName()
+            "string", "ContentId", "AdReward" -> String::class.asClassName()
             "Array" -> Array::class.asClassName()
             "bool", "boolean" -> Boolean::class.asClassName()
             "table" -> Map::class.asClassName()
             "Dictionary" -> Map::class.asClassName()
-            "function" -> Function::class.asClassName()
-            else -> ClassName("xyz.atkdev.rbxkt.api", cleanName)
+            "function", "Function" -> Function::class.asClassName()
+            else -> enums[cleanName] ?: classes[cleanName] ?: datatypes[cleanName] ?: Any::class.asClassName()
         }
 
-        if (cleanName == "Array" && !containsGenerics || cleanName == "function") typeName = (typeName as ClassName).parameterizedBy(STAR)
+        if (cleanName == "Array" && !containsGenerics || cleanName == "function" || cleanName == "Function") typeName = (typeName as ClassName).parameterizedBy(STAR)
         else if (cleanName == "table" || cleanName == "Dictionary") typeName = (typeName as ClassName).parameterizedBy(STAR, STAR)
-        else if (cleanName == "Tuple" && containsGenerics) typeName = ClassName("xyz.atkdev.rbxkt.api", type.substringAfter("<").substringBeforeLast(">"))
+        else if (cleanName == "Tuple" && containsGenerics) typeName = typeOf(type.substringAfter("<").substringBeforeLast(">"))
         else {
             if (containsGenerics) {
                 val generics = type.substringAfter("<").substringBeforeLast(">").split(",")
