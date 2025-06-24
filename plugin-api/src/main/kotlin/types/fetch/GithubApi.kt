@@ -1,12 +1,10 @@
 package types.fetch
 
 import com.charleskorn.kaml.Yaml
-import io.ktor.client.HttpClient
-import io.ktor.client.engine.cio.CIO
-import io.ktor.client.request.get
-import io.ktor.client.request.headers
-import io.ktor.client.request.url
-import io.ktor.client.statement.bodyAsText
+import io.ktor.client.*
+import io.ktor.client.engine.cio.*
+import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
@@ -22,7 +20,8 @@ private val yaml = Yaml(configuration = Yaml.default.configuration.copy(strictMo
 private val client = HttpClient(CIO)
 
 internal object GithubApi {
-    internal const val BASE_GITHUB_URL = "https://github.com/Roblox/creator-docs/tree/main/content/en-us/reference/engine"
+    internal const val BASE_GITHUB_URL =
+        "https://github.com/Roblox/creator-docs/tree/main/content/en-us/reference/engine"
     internal const val BASE_RAW_GITHUB_URL = "https://raw.githubusercontent.com/Roblox/creator-docs/refs/heads/main"
 
     suspend fun listFiles(url: String, isDocs: Boolean = true): GithubTree {
@@ -64,9 +63,11 @@ internal object GithubApi {
 
     suspend fun listAndReadFiles(url: String, isDocs: Boolean = true) = readFiles(listFiles(url, isDocs))
 
-    suspend inline fun <reified T> getJsonFile(url: String, isDocs: Boolean = true) = json.decodeFromString<T>(readFile(url, isDocs))
+    suspend inline fun <reified T> getJsonFile(url: String, isDocs: Boolean = true) =
+        json.decodeFromString<T>(readFile(url, isDocs))
 
-    suspend inline fun <reified T : DocsModel> getYamlFiles(url: String, isDocs: Boolean = true) = processDocsYamlFiles<T>(listAndReadFiles(url, isDocs))
+    suspend inline fun <reified T : DocsModel> getYamlFiles(url: String, isDocs: Boolean = true) =
+        processDocsYamlFiles<T>(listAndReadFiles(url, isDocs))
 }
 
 private inline fun <reified T : DocsModel> processDocsYamlFiles(files: List<String>) = files.associate {

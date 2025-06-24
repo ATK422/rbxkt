@@ -13,7 +13,7 @@ internal data class EnumModel(
     @SerialName("deprecation_message")
     val deprecationMessage: String,
     val items: List<EnumValue>
-): DocsModel {
+) : DocsModel {
     @Serializable
     internal data class EnumValue(
         val name: String,
@@ -77,7 +77,7 @@ internal data class DatatypeModel(
     val methods: List<Method>? = null,
     @SerialName("math_operations")
     val mathOperations: List<DataTypeMathOperation>? = null,
-): DocsModel {
+) : DocsModel {
     @Serializable
     internal data class DataTypeConstructor(
         val name: String,
@@ -126,7 +126,7 @@ internal data class ClassModel(
     val methods: List<Method>? = null,
     val events: List<ClassEvent>? = null,
 //    val callbacks: List<ClassCallback> = null,
-): DocsModel {
+) : DocsModel {
     @Serializable
     internal data class ClassEvent(
         val name: String,

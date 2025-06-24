@@ -1,11 +1,7 @@
 package types.utils
 
 import annotations.LuauName
-import com.squareup.kotlinpoet.Annotatable
-import com.squareup.kotlinpoet.AnnotationSpec
-import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.Documentable
-import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.*
 import types.fetch.GithubApi.BASE_GITHUB_URL
 import types.generator.RobloxTypeGenerator
 
@@ -23,10 +19,13 @@ internal fun <B : Annotatable.Builder<B>> B.addDeprecation(deprecationMessage: S
         addAnnotation(
             AnnotationSpec
                 .builder(Deprecated::class)
-                .addMember("\"${deprecationMessage
-                    .replace("\n", " ")
-                    .replace("\\","\\\"")
-                    .replace("\"", "\\\"")}\""
+                .addMember(
+                    "\"${
+                        deprecationMessage
+                            .replace("\n", " ")
+                            .replace("\\", "\\\"")
+                            .replace("\"", "\\\"")
+                    }\""
                 )
                 .build()
         )

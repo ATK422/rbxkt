@@ -1,40 +1,13 @@
 package types.generator
 
 import annotations.LuauName
-import com.charleskorn.kaml.Yaml
-import com.squareup.kotlinpoet.AnnotationSpec
-import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.FileSpec
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.LambdaTypeName
-import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.STAR
-import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.UNIT
-import com.squareup.kotlinpoet.asClassName
-import com.squareup.kotlinpoet.asTypeName
-import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.*
 import types.fetch.GithubApi
 import types.models.*
-import types.utils.addDeprecation
-import types.utils.addLuauName
-import types.utils.addSummary
-import types.utils.addTags
-import types.utils.cartesianProduct
-import types.utils.dedupeFunSpecs
-import types.utils.dedupePropertySpecs
-import types.utils.fromOperator
-import types.utils.toCamelCase
+import types.utils.*
 import java.io.File
-import kotlin.collections.map
 
 private val logger = System.getLogger("type gen")
 
@@ -55,7 +28,8 @@ internal data class CorrectionData(
 
 internal class RobloxTypeGenerator() {
     companion object {
-        internal const val CORRECTIONS_RAW_GITHUB_URL = "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
+        internal const val CORRECTIONS_RAW_GITHUB_URL =
+            "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
 
         const val PACKAGE_NAME = "xyz.atkdev.rbxkt.api"
     }
@@ -71,13 +45,18 @@ internal class RobloxTypeGenerator() {
 
         val suppressAnnotation = AnnotationSpec.builder(Suppress::class)
             .useSiteTarget(AnnotationSpec.UseSiteTarget.FILE)
-            .addMember("%L", "\"unused\", \"unused_parameter\", \"RedundantVisibilityModifier\", \"RemoveRedundantQualifierName\", \"SpellCheckingInspection\", \"DEPRECATION\"")
+            .addMember(
+                "%L",
+                "\"unused\", \"unused_parameter\", \"RedundantVisibilityModifier\", \"RemoveRedundantQualifierName\", \"SpellCheckingInspection\", \"DEPRECATION\""
+            )
             .build()
 
         val annotationFileSpec = FileSpec.builder(PACKAGE_NAME, "RobloxAnnotations").addAnnotation(suppressAnnotation)
         val enumModelSpec = FileSpec.builder("$PACKAGE_NAME.enums", "RobloxEnums").addAnnotation(suppressAnnotation)
-        val dataTypeModelSpec = FileSpec.builder("$PACKAGE_NAME.datatypes", "RobloxDatatypes").addAnnotation(suppressAnnotation)
-        val classModelSpec = FileSpec.builder("$PACKAGE_NAME.classes", "RobloxClasses").addAnnotation(suppressAnnotation)
+        val dataTypeModelSpec =
+            FileSpec.builder("$PACKAGE_NAME.datatypes", "RobloxDatatypes").addAnnotation(suppressAnnotation)
+        val classModelSpec =
+            FileSpec.builder("$PACKAGE_NAME.classes", "RobloxClasses").addAnnotation(suppressAnnotation)
 
         val (enumModels, dataTypeModels, classModels) = coroutineScope {
             val enums = async { GithubApi.getYamlFiles<EnumModel>("enums") }
@@ -102,10 +81,10 @@ internal class RobloxTypeGenerator() {
             launch { generateClasses(classModels, classModelSpec) }
         }
 
-        annotationFileSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        enumModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        dataTypeModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        classModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
+        annotationFileSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
+        enumModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
+        dataTypeModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
+        classModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
     }
 
     private suspend fun getCorrections(): Map<String, Map<String, CorrectionData>> {
@@ -131,9 +110,10 @@ internal class RobloxTypeGenerator() {
 
     private suspend fun generateAnnotations(fileSpec: FileSpec.Builder): Map<String, AnnotationSpec> {
         val schema = GithubApi.getJsonFile<SchemaModel>("tools/schemas/engine/classes.json")
-        val combinedNames = (schema.definitions.tags.items.enum + schema.definitions.threadSafety.enum + schema.definitions.securityTags.enum)
-            .filterNot { it == "Deprecated" }
-            .toMutableSet()
+        val combinedNames =
+            (schema.definitions.tags.items.enum + schema.definitions.threadSafety.enum + schema.definitions.securityTags.enum)
+                .filterNot { it == "Deprecated" }
+                .toMutableSet()
 
         combinedNames.forEach {
             fileSpec.addType(
@@ -180,10 +160,11 @@ internal class RobloxTypeGenerator() {
                 val funcName = constructor.name.substringAfter(".")
                 val isDefaultBuilder = funcName == "new"
 
-                val funcBuilder = if (isDefaultBuilder) FunSpec.constructorBuilder() else FunSpec.builder(funcName.toCamelCase())
-                    .addSummary(constructor.summary)
-                    .addDeprecation(constructor.deprecationMessage)
-                    .addTags(constructor.tags)
+                val funcBuilder =
+                    if (isDefaultBuilder) FunSpec.constructorBuilder() else FunSpec.builder(funcName.toCamelCase())
+                        .addSummary(constructor.summary)
+                        .addDeprecation(constructor.deprecationMessage)
+                        .addTags(constructor.tags)
 
                 if (funcName != funcName.toCamelCase()) funcBuilder.addLuauName(funcName)
                 if (!isDefaultBuilder) funcBuilder.addModifiers(KModifier.EXTERNAL)
@@ -192,7 +173,9 @@ internal class RobloxTypeGenerator() {
 
                 hasPrimaryConstructor = isDefaultBuilder
 
-                if (isDefaultBuilder) builder.primaryConstructor(funcBuilder.build()) else companionBuilder.addFunction(funcBuilder.build())
+                if (isDefaultBuilder) builder.primaryConstructor(funcBuilder.build()) else companionBuilder.addFunction(
+                    funcBuilder.build()
+                )
             }
 
             file.constants?.forEach { constant ->
@@ -208,12 +191,21 @@ internal class RobloxTypeGenerator() {
             val constantNames = file.constants?.map { it.name.substringAfter(".") } ?: emptyList()
             file.properties?.let { property ->
                 builder
-                    .addProperties(property
+                    .addProperties(
+                        property
                         .filterNot { it.name in constantNames }
                         .map(::generateProperty))
             }
 
-            file.methods?.let { methods -> builder.addFunctions(methods.flatMap { generateMethod(datatypes[name]!!, it, companionBuilder) }) }
+            file.methods?.let { methods ->
+                builder.addFunctions(methods.flatMap {
+                    generateMethod(
+                        datatypes[name]!!,
+                        it,
+                        companionBuilder
+                    )
+                })
+            }
 
             file.mathOperations?.forEach { mathOperation ->
                 val operation = mathOperation.operation.fromOperator()
@@ -230,18 +222,24 @@ internal class RobloxTypeGenerator() {
             if (name.contains("Params")) {
                 builder.addFunction(
                     FunSpec.constructorBuilder()
-                        .addParameter("builder", LambdaTypeName.get(
-                            datatypes[name]!!,
-                            emptyList(),
-                            UNIT)
+                        .addParameter(
+                            "builder", LambdaTypeName.get(
+                                datatypes[name]!!,
+                                emptyList(),
+                                UNIT
+                            )
                         )
                         .callThisConstructor()
                         .build()
                 )
-                if (!hasPrimaryConstructor) builder.primaryConstructor(FunSpec.constructorBuilder().addModifiers(KModifier.PRIVATE).build())
+                if (!hasPrimaryConstructor) builder.primaryConstructor(
+                    FunSpec.constructorBuilder().addModifiers(KModifier.PRIVATE).build()
+                )
             }
 
-            if (companionBuilder.propertySpecs.isNotEmpty() || companionBuilder.funSpecs.isNotEmpty() || companionBuilder.typeSpecs.isNotEmpty()) builder.addType(companionBuilder.build())
+            if (companionBuilder.propertySpecs.isNotEmpty() || companionBuilder.funSpecs.isNotEmpty() || companionBuilder.typeSpecs.isNotEmpty()) builder.addType(
+                companionBuilder.build()
+            )
             val dataType = builder.build()
             fileSpec.addType(dataType)
         }
@@ -260,9 +258,18 @@ internal class RobloxTypeGenerator() {
                 .addDeprecation(file.deprecationMessage)
                 .addTags(file.tags)
 
-            file.properties?.let { prop -> interfaceBuilder.addProperties(prop.map { generateProperty(it, false) } ) }
+            file.properties?.let { prop -> interfaceBuilder.addProperties(prop.map { generateProperty(it, false) }) }
 
-            file.methods?.let { methods -> interfaceBuilder.addFunctions(methods.flatMap { generateMethod(classes[name]!!, it, companionBuilder, false) }) }
+            file.methods?.let { methods ->
+                interfaceBuilder.addFunctions(methods.flatMap {
+                    generateMethod(
+                        classes[name]!!,
+                        it,
+                        companionBuilder,
+                        false
+                    )
+                })
+            }
 
             file.events?.forEach { event ->
                 val eventName = event.name.substringAfter(".")
@@ -280,7 +287,9 @@ internal class RobloxTypeGenerator() {
                 interfaceBuilder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${it}"))
             }
 
-            if (companionBuilder.propertySpecs.isNotEmpty() || companionBuilder.funSpecs.isNotEmpty() || companionBuilder.typeSpecs.isNotEmpty()) interfaceBuilder.addType(companionBuilder.build())
+            if (companionBuilder.propertySpecs.isNotEmpty() || companionBuilder.funSpecs.isNotEmpty() || companionBuilder.typeSpecs.isNotEmpty()) interfaceBuilder.addType(
+                companionBuilder.build()
+            )
 
             if (name == "Instance") {
                 interfaceBuilder.addFunction(
@@ -313,8 +322,9 @@ internal class RobloxTypeGenerator() {
 
         files.forEach { (name, file) ->
             if (name == "Studio") return@forEach
-            val builder = if (file.tags.contains("Service")) TypeSpec.objectBuilder(name) else TypeSpec.classBuilder(name)
-                .addSummary(file.summary)
+            val builder =
+                if (file.tags.contains("Service")) TypeSpec.objectBuilder(name) else TypeSpec.classBuilder(name)
+                    .addSummary(file.summary)
 
             builder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${name}"))
             if (name != "Instance") builder.superclass(classes["Instance"]!!)
@@ -352,10 +362,12 @@ internal class RobloxTypeGenerator() {
             if (!file.tags.contains("Service")) {
                 builder.addFunction(
                     FunSpec.constructorBuilder()
-                        .addParameter("builder", LambdaTypeName.get(
-                            classes[name]!!,
-                            emptyList(),
-                            UNIT)
+                        .addParameter(
+                            "builder", LambdaTypeName.get(
+                                classes[name]!!,
+                                emptyList(),
+                                UNIT
+                            )
                         )
                         .callThisConstructor()
                         .build()
@@ -433,10 +445,11 @@ internal class RobloxTypeGenerator() {
     }
 
     private fun generateEvent(event: ClassModel.ClassEvent, initialize: Boolean = true): PropertySpec {
-        val propertyBuilder = PropertySpec.builder(event.name.substringAfter("."), ClassName(PACKAGE_NAME, "RBXScriptConnection"))
-            .addSummary(event.summary)
-            .addDeprecation(event.deprecationMessage)
-            .addTags(event.tags)
+        val propertyBuilder =
+            PropertySpec.builder(event.name.substringAfter("."), ClassName(PACKAGE_NAME, "RBXScriptConnection"))
+                .addSummary(event.summary)
+                .addDeprecation(event.deprecationMessage)
+                .addTags(event.tags)
         if (initialize) propertyBuilder.initializer("TODO()")
 
         return propertyBuilder.build()
@@ -464,7 +477,12 @@ internal class RobloxTypeGenerator() {
         return propBuilder.build()
     }
 
-    private fun generateMethod(className: ClassName, method: Method, companion: TypeSpec.Builder, external: Boolean = true): List<FunSpec> {
+    private fun generateMethod(
+        className: ClassName,
+        method: Method,
+        companion: TypeSpec.Builder,
+        external: Boolean = true
+    ): List<FunSpec> {
         if (method.parameters?.any { it.type.contains(" | ") || it.type.contains(" & ") } == true) {
             val methods = mutableListOf<FunSpec>()
 
@@ -506,7 +524,8 @@ internal class RobloxTypeGenerator() {
             funcBuilder.returns(
                 className
                     .nestedClass("Companion")
-                    .nestedClass(returnClass.name!!))
+                    .nestedClass(returnClass.name!!)
+            )
         } else if (method.returns.size == 1 && method.returns[0].type != "()") {
             funcBuilder.returns(typeOf(method.returns[0].type))
         }
@@ -577,9 +596,12 @@ internal class RobloxTypeGenerator() {
             else -> enums[cleanName] ?: classes[cleanName] ?: datatypes[cleanName] ?: Any::class.asClassName()
         }
 
-        if (cleanName == "Array" && !containsGenerics || cleanName == "function" || cleanName == "Function") typeName = (typeName as ClassName).parameterizedBy(STAR)
-        else if (cleanName == "table" || cleanName == "Dictionary") typeName = (typeName as ClassName).parameterizedBy(STAR, STAR)
-        else if (cleanName == "Tuple" && containsGenerics) typeName = typeOf(type.substringAfter("<").substringBeforeLast(">"))
+        if (cleanName == "Array" && !containsGenerics || cleanName == "function" || cleanName == "Function") typeName =
+            (typeName as ClassName).parameterizedBy(STAR)
+        else if (cleanName == "table" || cleanName == "Dictionary") typeName =
+            (typeName as ClassName).parameterizedBy(STAR, STAR)
+        else if (cleanName == "Tuple" && containsGenerics) typeName =
+            typeOf(type.substringAfter("<").substringBeforeLast(">"))
         else {
             if (containsGenerics) {
                 val generics = type.substringAfter("<").substringBeforeLast(">").split(",")
