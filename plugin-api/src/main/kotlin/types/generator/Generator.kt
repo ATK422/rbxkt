@@ -2,10 +2,8 @@ package types.generator
 
 import annotations.LuauName
 import com.charleskorn.kaml.Yaml
-import com.squareup.kotlinpoet.Annotatable
 import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.Documentable
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -19,262 +17,29 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 import com.squareup.kotlinpoet.asClassName
 import com.squareup.kotlinpoet.asTypeName
-import io.ktor.client.*
-import io.ktor.client.engine.cio.*
-import io.ktor.client.request.*
-import io.ktor.client.statement.*
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.runBlocking
-import kotlinx.serialization.KSerializer
-import kotlinx.serialization.SerialName
-import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.descriptors.PrimitiveKind
-import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
-import kotlinx.serialization.encoding.Decoder
-import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonDecoder
-import kotlinx.serialization.json.JsonPrimitive
+import types.fetch.GithubApi
+import types.models.*
+import types.utils.addDeprecation
+import types.utils.addLuauName
+import types.utils.addSummary
+import types.utils.addTags
+import types.utils.cartesianProduct
+import types.utils.dedupeFunSpecs
+import types.utils.dedupePropertySpecs
+import types.utils.fromOperator
+import types.utils.toCamelCase
 import java.io.File
-import kotlin.Deprecated
-import kotlin.collections.ifEmpty
 import kotlin.collections.map
 
-private val json = Json { ignoreUnknownKeys = true }
-private val yaml = Yaml(configuration = Yaml.default.configuration.copy(strictMode = false))
-
 private val logger = System.getLogger("type gen")
-private val client = HttpClient(CIO)
 
-@Serializable
-internal data class GithubFileTreeResponse(
-    val payload: GithubFileTreePayload
-)
-
-@Serializable
-internal data class GithubFileTreePayload(
-    val tree: GithubTree
-)
-
-@Serializable
-internal data class GithubTree(
-    val totalCount: Int,
-    val items: List<GithubTreeItem>,
-)
-
-@Serializable
-internal data class GithubTreeItem(
-    val name: String,
-    val path: String,
-    val contentType: String,
-)
-
-@Serializable
-internal data class ClassSchema(
-    val definitions: SchemaDefinitions,
-) {
-    @Serializable
-    internal data class SchemaDefinitions(
-        @SerialName("security_tags")
-        val securityTags: SchemaTagsEnum,
-        @SerialName("thread_safety")
-        val threadSafety: SchemaTagsEnum,
-        val tags: SchemaTags,
-    ) {
-        @Serializable
-        internal data class SchemaTags(val items: SchemaTagsEnum)
-
-        @Serializable
-        internal data class SchemaTagsEnum(val enum: List<String>)
-    }
-}
-
-internal interface DocsFile {
+internal interface DocsModel {
     val name: String
-}
-
-@Serializable
-internal data class EnumFile(
-    override val name: String,
-    val summary: String,
-    val tags: List<String>,
-    @SerialName("deprecation_message")
-    val deprecationMessage: String,
-    val items: List<EnumValue>
-): DocsFile {
-    @Serializable
-    internal data class EnumValue(
-        val name: String,
-        val summary: String,
-        val tags: List<String>,
-        @SerialName("deprecation_message")
-        val deprecationMessage: String
-    )
-}
-
-@Serializable
-internal data class Parameter(
-    val name: String,
-    val type: String,
-    @Serializable(with = AlwaysStringSerializer::class)
-    val default: String? = null,
-    val summary: String,
-)
-
-@Serializable
-internal data class Return(
-    val type: String,
-    val summary: String,
-)
-
-@Serializable
-internal data class Method(
-    val name: String,
-    val summary: String,
-    val parameters: List<Parameter>? = emptyList(),
-    val returns: List<Return>,
-    val tags: List<String>,
-    @SerialName("thread_safety")
-    val threadSafety: String? = null,
-    @SerialName("deprecation_message")
-    val deprecationMessage: String,
-)
-
-@Serializable
-internal data class Property(
-    val name: String,
-    val type: String,
-    val summary: String,
-    val tags: List<String>,
-    @SerialName("thread_safety")
-    val threadSafety: String? = null,
-    @SerialName("deprecation_message")
-    val deprecationMessage: String,
-)
-
-@Serializable
-internal data class DataTypeFile(
-    override val name: String,
-    val summary: String,
-    val tags: List<String>,
-    @SerialName("deprecation_message")
-    val deprecationMessage: String,
-    val constructors: List<DataTypeConstructor>? = listOf(),
-    val constants: List<DataTypeConstant>? = listOf(),
-    val properties: List<Property>? = listOf(),
-    val methods: List<Method>? = null,
-    @SerialName("math_operations")
-    val mathOperations: List<DataTypeMathOperation>? = null,
-): DocsFile {
-    @Serializable
-    internal data class DataTypeConstructor(
-        val name: String,
-        val summary: String,
-        val tags: List<String>,
-        val parameters: List<Parameter>? = emptyList(),
-        @SerialName("deprecation_message")
-        val deprecationMessage: String,
-    )
-
-    @Serializable
-    internal data class DataTypeConstant(
-        val name: String,
-        val type: String,
-        val summary: String,
-        val tags: List<String>,
-        @SerialName("deprecation_message")
-        val deprecationMessage: String,
-    )
-
-    @Serializable
-    internal data class DataTypeMathOperation(
-        val operation: String,
-        val summary: String,
-        @SerialName("type_a")
-        val typeA: String,
-        @SerialName("type_b")
-        val typeB: String,
-        @SerialName("return_type")
-        val returnType: String,
-        val tags: List<String>,
-        @SerialName("deprecation_message")
-        val deprecationMessage: String,
-    )
-}
-
-@Serializable
-internal data class ClassFile(
-    override val name: String,
-    val summary: String,
-    val tags: List<String>,
-    @SerialName("deprecation_message")
-    val deprecationMessage: String,
-    val inherits: List<String>? = null,
-    val properties: List<Property>? = null,
-    val methods: List<Method>? = null,
-    val events: List<ClassEvent>? = null,
-//    val callbacks: List<ClassCallback> = null,
-): DocsFile {
-    @Serializable
-    internal data class ClassEvent(
-        val name: String,
-        val summary: String,
-        val parameters: List<Parameter>,
-        val tags: List<String>,
-        @SerialName("deprecation_message")
-        val deprecationMessage: String,
-    )
-}
-
-@Serializable
-internal data class CorrectionsRoot(
-    @SerialName("Classes")
-    val classes: List<Correction>,
-) {
-    @Serializable
-    internal data class Correction(
-        @SerialName("Name")
-        val name: String,
-        @SerialName("Members")
-        val members: List<CorrectionMember>,
-    ) {
-        @Serializable
-        internal data class CorrectionMember(
-            @SerialName("Name")
-            val name: String,
-            @SerialName("ReturnType")
-            val returnType: CorrectionType? = null,
-            @SerialName("TupleReturns")
-            val tupleReturn: List<CorrectionType>? = null,
-            @SerialName("ValueType")
-            val valueType: CorrectionType? = null,
-            @SerialName("Parameters")
-            val parameters: List<CorrectionParameter>? = null
-        ) {
-            @Serializable
-            internal data class CorrectionParameter(
-                @SerialName("Name")
-                val name: String,
-                @SerialName("Type")
-                val type: CorrectionType? = null,
-                @SerialName("Default")
-                val default: String? = null
-            )
-
-            @Serializable
-            internal data class CorrectionType(
-                @SerialName("Name")
-                val name: String? = null,
-                @SerialName("Generic")
-                val generic: String? = null,
-            )
-        }
-    }
 }
 
 internal data class CorrectionData(
@@ -288,87 +53,17 @@ internal data class CorrectionData(
     )
 }
 
-object AlwaysStringSerializer : KSerializer<String> {
-    override val descriptor = PrimitiveSerialDescriptor("AlwaysString", PrimitiveKind.STRING)
-
-    override fun deserialize(decoder: Decoder): String = when (decoder) {
-        is JsonDecoder -> {
-            val element = decoder.decodeJsonElement()
-            when (element) {
-                is JsonPrimitive -> if (element.isString) element.content else element.toString()
-                else -> element.toString()
-            }
-        }
-
-        else -> decoder.decodeString()
-    }
-
-    override fun serialize(encoder: Encoder, value: String) = encoder.encodeString(value)
-}
-
 internal class RobloxTypeGenerator() {
     companion object {
-        private const val BASE_GITHUB_URL = "https://github.com/Roblox/creator-docs/tree/main/content/en-us/reference/engine"
-        private const val BASE_RAW_GITHUB_URL = "https://raw.githubusercontent.com/Roblox/creator-docs/refs/heads/main"
-        private const val SCHEMA_RAW_GITHUB_URL = "$BASE_RAW_GITHUB_URL/tools/schemas/engine/classes.json"
-        private const val CORRECTIONS_RAW_GITHUB_URL = "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
-        
-        private const val PACKAGE_NAME = "xyz.atkdev.rbxkt.api"
+        internal const val CORRECTIONS_RAW_GITHUB_URL = "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
 
-        private lateinit var annotations: Map<String, AnnotationSpec>
-        private lateinit var enums: Map<String, ClassName>
-        private lateinit var datatypes: Map<String, ClassName>
-        private lateinit var classes: Map<String, ClassName>
+        const val PACKAGE_NAME = "xyz.atkdev.rbxkt.api"
     }
 
-    private fun baseUrl(path: String): String = "$BASE_GITHUB_URL/$path"
-    private fun baseRawUrl(path: String): String = "$BASE_RAW_GITHUB_URL/$path"
-
-    private suspend fun listFiles(url: String): GithubTree {
-        val response = client.get {
-            url(url)
-            headers {
-                append("Accept", "application/json")
-            }
-        }
-        // TODO: i love error handling
-        val text = response.bodyAsText()
-        val body = json.decodeFromString<GithubFileTreeResponse>(text)
-        return body.payload.tree
-    }
-
-    private suspend fun readFiles(paths: GithubTree): List<String> = coroutineScope {
-        paths.items.map { item ->
-            async {
-                client.get {
-                    url(baseRawUrl(item.path))
-                    headers {
-                        append("Accept", "application/json")
-                    }
-                }.bodyAsText()
-            }
-        }.awaitAll()
-    }
-
-    private suspend fun readFile(rawPath: String): String = coroutineScope {
-        async {
-            client.get {
-                url(rawPath)
-                headers {
-                    append("Accept", "application/json")
-                }
-            }.bodyAsText()
-        }.await()
-    }
-    
-    private suspend fun listAndReadFiles(url: String) = readFiles(listFiles(url))
-
-    private inline fun <reified T : DocsFile> processYamlFiles(files: List<String>): Map<String, T> {
-        return files.associate {
-            val file = yaml.decodeFromString<T>(it)
-            file.name to file
-        }
-    }
+    internal lateinit var annotations: Map<String, AnnotationSpec>
+    internal lateinit var enums: Map<String, ClassName>
+    internal lateinit var datatypes: Map<String, ClassName>
+    internal lateinit var classes: Map<String, ClassName>
 
     @OptIn(ExperimentalCoroutinesApi::class)
     internal suspend fun generate() {
@@ -380,14 +75,14 @@ internal class RobloxTypeGenerator() {
             .build()
 
         val annotationFileSpec = FileSpec.builder(PACKAGE_NAME, "RobloxAnnotations").addAnnotation(suppressAnnotation)
-        val enumFileSpec = FileSpec.builder("$PACKAGE_NAME.enums", "RobloxEnums").addAnnotation(suppressAnnotation)
-        val datatypeFileSpec = FileSpec.builder("$PACKAGE_NAME.datatypes", "RobloxDatatypes").addAnnotation(suppressAnnotation)
-        val classFileSpec = FileSpec.builder("$PACKAGE_NAME.classes", "RobloxClasses").addAnnotation(suppressAnnotation)
+        val enumModelSpec = FileSpec.builder("$PACKAGE_NAME.enums", "RobloxEnums").addAnnotation(suppressAnnotation)
+        val dataTypeModelSpec = FileSpec.builder("$PACKAGE_NAME.datatypes", "RobloxDatatypes").addAnnotation(suppressAnnotation)
+        val classModelSpec = FileSpec.builder("$PACKAGE_NAME.classes", "RobloxClasses").addAnnotation(suppressAnnotation)
 
-        val (enumFiles, datatypeFiles, classFiles) = coroutineScope {
-            val enums = async { processYamlFiles<EnumFile>(listAndReadFiles(baseUrl("enums"))) }
-            val datatypes = async { processYamlFiles<DataTypeFile>(listAndReadFiles(baseUrl("datatypes"))) }
-            val classes = async { processYamlFiles<ClassFile>(listAndReadFiles(baseUrl("classes"))) }
+        val (enumModels, dataTypeModels, classModels) = coroutineScope {
+            val enums = async { GithubApi.getYamlFiles<EnumModel>("enums") }
+            val datatypes = async { GithubApi.getYamlFiles<DatatypeModel>("datatypes") }
+            val classes = async { GithubApi.getYamlFiles<ClassModel>("classes") }
 
             awaitAll(enums, datatypes, classes)
 
@@ -395,27 +90,26 @@ internal class RobloxTypeGenerator() {
         }
 
 
-        enums = enumFiles.keys.associateWith { ClassName("$PACKAGE_NAME.enums", it) }
-        datatypes = datatypeFiles.keys.associateWith { ClassName("$PACKAGE_NAME.datatypes", it) }
-        classes = classFiles.keys.associateWith { ClassName("$PACKAGE_NAME.classes", it) }
+        enums = enumModels.keys.associateWith { ClassName("$PACKAGE_NAME.enums", it) }
+        datatypes = dataTypeModels.keys.associateWith { ClassName("$PACKAGE_NAME.datatypes", it) }
+        classes = classModels.keys.associateWith { ClassName("$PACKAGE_NAME.classes", it) }
 
         annotations = generateAnnotations(annotationFileSpec)
 
         coroutineScope {
-            launch { generateEnums(enumFiles, enumFileSpec) }
-            launch { generateDataTypes(datatypeFiles, datatypeFileSpec) }
-            launch { generateClasses(classFiles, classFileSpec) }
+            launch { generateEnums(enumModels, enumModelSpec) }
+            launch { generateDataTypes(dataTypeModels, dataTypeModelSpec) }
+            launch { generateClasses(classModels, classModelSpec) }
         }
 
         annotationFileSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        enumFileSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        datatypeFileSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
-        classFileSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
+        enumModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
+        dataTypeModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
+        classModelSpec.build().writeTo(File(System.getProperty("user.dir")+"/src/api/"))
     }
 
     private suspend fun getCorrections(): Map<String, Map<String, CorrectionData>> {
-        val file = readFile(CORRECTIONS_RAW_GITHUB_URL)
-        val corrections = json.decodeFromString<CorrectionsRoot>(file)
+        val corrections = GithubApi.getJsonFile<CorrectionsModel>(CORRECTIONS_RAW_GITHUB_URL, false)
         return corrections.classes.associate { correction ->
             correction.name to correction.members.associate { member ->
                 member.name to CorrectionData(
@@ -436,38 +130,34 @@ internal class RobloxTypeGenerator() {
     }
 
     private suspend fun generateAnnotations(fileSpec: FileSpec.Builder): Map<String, AnnotationSpec> {
-        val files = readFile(SCHEMA_RAW_GITHUB_URL)
-        val schema = json.decodeFromString<ClassSchema>(files)
+        val schema = GithubApi.getJsonFile<SchemaModel>("tools/schemas/engine/classes.json")
         val combinedNames = (schema.definitions.tags.items.enum + schema.definitions.threadSafety.enum + schema.definitions.securityTags.enum)
             .filterNot { it == "Deprecated" }
             .toMutableSet()
 
         combinedNames.forEach {
             fileSpec.addType(
-                TypeSpec
-                .annotationBuilder(it)
-                .addModifiers(KModifier.INTERNAL)
-                .build()
+                TypeSpec.annotationBuilder(it)
+                    .addModifiers(KModifier.INTERNAL)
+                    .build()
             )
         }
 
         return combinedNames.associateWith { AnnotationSpec.builder(ClassName(PACKAGE_NAME, it)).build() }
     }
 
-    private fun generateEnums(files: Map<String, EnumFile>, fileSpec: FileSpec.Builder) {
+    private fun generateEnums(files: Map<String, EnumModel>, fileSpec: FileSpec.Builder) {
         files.forEach { (name, file) ->
             val builder = TypeSpec.enumBuilder(name)
-
-            addSummary(builder, file.summary)
-            addDeprecation(builder, file.deprecationMessage)
-            addTags(builder, file.tags)
+                .addSummary(file.summary)
+                .addDeprecation(file.deprecationMessage)
+                .addTags(file.tags)
 
             file.items.forEach { item ->
                 val anonClassBuilder = TypeSpec.anonymousClassBuilder()
-
-                addSummary(anonClassBuilder, item.summary)
-                addDeprecation(anonClassBuilder, item.deprecationMessage)
-                addTags(anonClassBuilder, item.tags)
+                    .addSummary(item.summary)
+                    .addDeprecation(item.deprecationMessage)
+                    .addTags(item.tags)
 
                 builder.addEnumConstant(item.name, anonClassBuilder.build())
             }
@@ -477,28 +167,28 @@ internal class RobloxTypeGenerator() {
         }
     }
 
-    private suspend fun generateDataTypes(files: Map<String, DataTypeFile>, fileSpec: FileSpec.Builder) {
+    private suspend fun generateDataTypes(files: Map<String, DatatypeModel>, fileSpec: FileSpec.Builder) {
         files.forEach { (name, file) ->
             val builder = TypeSpec.classBuilder(name)
-
-            addSummary(builder, file.summary)
-            addDeprecation(builder, file.deprecationMessage)
-            addTags(builder, file.tags)
+                .addSummary(file.summary)
+                .addDeprecation(file.deprecationMessage)
+                .addTags(file.tags)
 
             var hasPrimaryConstructor = false
             val companionBuilder = TypeSpec.companionObjectBuilder()
             file.constructors?.forEach { constructor ->
                 val funcName = constructor.name.substringAfter(".")
                 val isDefaultBuilder = funcName == "new"
+
                 val funcBuilder = if (isDefaultBuilder) FunSpec.constructorBuilder() else FunSpec.builder(funcName.toCamelCase())
-                if (funcName != funcName.toCamelCase()) addLuauName(funcBuilder, funcName)
+                    .addSummary(constructor.summary)
+                    .addDeprecation(constructor.deprecationMessage)
+                    .addTags(constructor.tags)
+
+                if (funcName != funcName.toCamelCase()) funcBuilder.addLuauName(funcName)
                 if (!isDefaultBuilder) funcBuilder.addModifiers(KModifier.EXTERNAL)
                 constructor.parameters?.let { funcBuilder.addParameters(it.map(::generateParameter)) }
                 if (!isDefaultBuilder) funcBuilder.returns(datatypes[name]!!)
-
-                addSummary(funcBuilder, constructor.summary)
-                addDeprecation(funcBuilder, constructor.deprecationMessage)
-                addTags(funcBuilder, constructor.tags)
 
                 hasPrimaryConstructor = isDefaultBuilder
 
@@ -507,12 +197,11 @@ internal class RobloxTypeGenerator() {
 
             file.constants?.forEach { constant ->
                 val propBuilder = PropertySpec.builder(constant.name.substringAfter("."), typeOf(constant.type))
+                    .addSummary(constant.summary)
+                    .addDeprecation(constant.deprecationMessage)
+                    .addTags(constant.tags)
+                    .initializer("TODO()")
 
-                addSummary(propBuilder, constant.summary)
-                addDeprecation(propBuilder, constant.deprecationMessage)
-                addTags(propBuilder, constant.tags)
-
-                propBuilder.initializer("TODO()")
                 companionBuilder.addProperty(propBuilder.build())
             }
 
@@ -527,7 +216,7 @@ internal class RobloxTypeGenerator() {
             file.methods?.let { methods -> builder.addFunctions(methods.flatMap { generateMethod(datatypes[name]!!, it, companionBuilder) }) }
 
             file.mathOperations?.forEach { mathOperation ->
-                val operation = operatorToString(mathOperation.operation)
+                val operation = mathOperation.operation.fromOperator()
                 val mathBuilder = FunSpec.builder(operation)
                     .addModifiers(KModifier.EXTERNAL)
                     .addParameter("other", typeOf(mathOperation.typeB))
@@ -562,15 +251,14 @@ internal class RobloxTypeGenerator() {
     private suspend fun generateRobloxGlobals() {}
     private suspend fun generateLibraries() {}
 
-    private suspend fun generateClasses(files: Map<String, ClassFile>, fileSpec: FileSpec.Builder) {
+    private suspend fun generateClasses(files: Map<String, ClassModel>, fileSpec: FileSpec.Builder) {
         val interfaces = files.mapValues { (name, file) ->
             if (name == "Studio") return@mapValues TypeSpec.objectBuilder("Studio").build()
             val interfaceBuilder = TypeSpec.interfaceBuilder("I${name}")
 
             val companionBuilder = TypeSpec.companionObjectBuilder()
-
-            addDeprecation(interfaceBuilder, file.deprecationMessage)
-            addTags(interfaceBuilder, file.tags)
+                .addDeprecation(file.deprecationMessage)
+                .addTags(file.tags)
 
             file.properties?.let { prop -> interfaceBuilder.addProperties(prop.map { generateProperty(it, false) } ) }
 
@@ -579,11 +267,12 @@ internal class RobloxTypeGenerator() {
             file.events?.forEach { event ->
                 val eventName = event.name.substringAfter(".")
                 val propertyBuilder = PropertySpec.builder(eventName.toCamelCase(), datatypes["RBXScriptConnection"]!!)
-                if (eventName != eventName.toCamelCase()) addLuauName(propertyBuilder, eventName)
+                    .addSummary(event.summary)
+                    .addDeprecation(event.deprecationMessage)
+                    .addTags(event.tags)
+
+                if (eventName != eventName.toCamelCase()) propertyBuilder.addLuauName(eventName)
                 if (eventName == "Changed" && name != "Object") propertyBuilder.addModifiers(KModifier.OVERRIDE)
-                addSummary(propertyBuilder, event.summary)
-                addDeprecation(propertyBuilder, event.deprecationMessage)
-                addTags(propertyBuilder, event.tags)
                 interfaceBuilder.addProperty(propertyBuilder.build())
             }
 
@@ -603,17 +292,8 @@ internal class RobloxTypeGenerator() {
                 )
             }
 
-            interfaceBuilder.funSpecs.run {
-                val funSpecs = removeDuplicatesBySignature()
-                clear()
-                addAll(funSpecs)
-            }
-
-            interfaceBuilder.propertySpecs.run {
-                val propSpecs = removeDuplicatesByName()
-                clear()
-                addAll(propSpecs)
-            }
+            interfaceBuilder.dedupeFunSpecs()
+            interfaceBuilder.dedupePropertySpecs()
 
             return@mapValues interfaceBuilder.build()
         }
@@ -634,6 +314,7 @@ internal class RobloxTypeGenerator() {
         files.forEach { (name, file) ->
             if (name == "Studio") return@forEach
             val builder = if (file.tags.contains("Service")) TypeSpec.objectBuilder(name) else TypeSpec.classBuilder(name)
+                .addSummary(file.summary)
 
             builder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${name}"))
             if (name != "Instance") builder.superclass(classes["Instance"]!!)
@@ -687,19 +368,9 @@ internal class RobloxTypeGenerator() {
                 else
                     builder.primaryConstructor(FunSpec.constructorBuilder().addModifiers(KModifier.PRIVATE).build())
             }
-            addSummary(builder, file.summary)
 
-            builder.funSpecs.run {
-                val funSpecs = removeDuplicatesBySignature()
-                clear()
-                addAll(funSpecs)
-            }
-
-            builder.propertySpecs.run {
-                val propSpecs = removeDuplicatesByName()
-                clear()
-                addAll(propSpecs)
-            }
+            builder.dedupeFunSpecs()
+            builder.dedupePropertySpecs()
 
             val typeSpec = builder.build()
             fileSpec.addType(typeSpec)
@@ -731,43 +402,6 @@ internal class RobloxTypeGenerator() {
         }
     }
 
-    private fun addSummary(builder: Documentable.Builder<*>, summary: String) {
-        val modified = summary
-            .replace(Regex("(<.*?>)"), "")
-            .replace("**", "__")
-            .replace("\"", "\\\"")
-            .replace("../../../", BASE_GITHUB_URL.substringBefore("/reference/engine"))
-        if (modified.isNotEmpty()) builder.addKdoc("%L", modified)
-    }
-
-    private fun addDeprecation(builder: Annotatable.Builder<*>, deprecationMessage: String) {
-        if (deprecationMessage.isNotBlank())
-            builder
-                .addAnnotation(
-                    AnnotationSpec
-                        .builder(Deprecated::class)
-                        .addMember("\"${deprecationMessage
-                            .replace("\n", " ")
-                            .replace("\\","\\\"")
-                            .replace("\"", "\\\"")}\""
-                        )
-                        .build())
-    }
-
-    private fun addTags(builder: Annotatable.Builder<*>, tags: List<String>) {
-        builder.addAnnotations(
-            tags
-            .filterNot { it == "Deprecated" }
-            .map { annotations[it] ?: error("Annotation $it not found!") }
-        )
-    }
-
-    private fun addLuauName(builder: Annotatable.Builder<*>, name: String) {
-        builder.addAnnotation(
-            AnnotationSpec.builder(LuauName::class)
-                .addMember("\"%L\"", name).build())
-    }
-
     private fun generateReturnClass(
         funcName: String,
         returnList: List<Return>
@@ -784,25 +418,26 @@ internal class RobloxTypeGenerator() {
             val type = typeOf(ret.type)
 
             val param = ParameterSpec.builder(name, type)
-            addSummary(param, ret.summary)
+                .addSummary(ret.summary)
+
             constructor.addParameter(param.build())
 
             val prop = PropertySpec.builder(name, type)
                 .initializer(name)
-            addSummary(prop, ret.summary)
+                .addSummary(ret.summary)
+
             classBuilder.addProperty(prop.build())
         }
 
         return classBuilder.primaryConstructor(constructor.build()).build()
     }
 
-    private fun generateEvent(event: ClassFile.ClassEvent, initialize: Boolean = true): PropertySpec {
+    private fun generateEvent(event: ClassModel.ClassEvent, initialize: Boolean = true): PropertySpec {
         val propertyBuilder = PropertySpec.builder(event.name.substringAfter("."), ClassName(PACKAGE_NAME, "RBXScriptConnection"))
+            .addSummary(event.summary)
+            .addDeprecation(event.deprecationMessage)
+            .addTags(event.tags)
         if (initialize) propertyBuilder.initializer("TODO()")
-
-        addSummary(propertyBuilder, event.summary)
-        addDeprecation(propertyBuilder, event.deprecationMessage)
-        addTags(propertyBuilder, event.tags)
 
         return propertyBuilder.build()
     }
@@ -811,8 +446,11 @@ internal class RobloxTypeGenerator() {
         val propName = property.name.substringAfter(".")
         val type = typeOf(property.type)
         val propBuilder = PropertySpec.builder(propName.toCamelCase(), type).mutable(true)
+            .addSummary(property.summary)
+            .addDeprecation(property.deprecationMessage)
+            .addTags(property.tags + listOfNotNull(property.threadSafety))
 
-        if (propName != propName.toCamelCase()) addLuauName(propBuilder, propName)
+        if (propName != propName.toCamelCase()) propBuilder.addLuauName(propName)
 
         if (initialize) {
             if (type == Boolean::class.asClassName())
@@ -822,10 +460,6 @@ internal class RobloxTypeGenerator() {
             else
                 propBuilder.addModifiers(KModifier.LATEINIT)
         }
-
-        addSummary(propBuilder, property.summary)
-        addDeprecation(propBuilder, property.deprecationMessage)
-        addTags(propBuilder, property.tags + listOfNotNull(property.threadSafety))
 
         return propBuilder.build()
     }
@@ -847,7 +481,7 @@ internal class RobloxTypeGenerator() {
                     }
                 }
 
-            for (variantParams in cartesianProduct(paramVariants)) {
+            for (variantParams in paramVariants.cartesianProduct()) {
                 val overload = method.copy(parameters = variantParams)
                 methods += generateMethod(className, overload, companion)
             }
@@ -857,7 +491,11 @@ internal class RobloxTypeGenerator() {
 
         val methodName = method.name.substringAfter(":")
         val funcBuilder = FunSpec.builder(methodName.toCamelCase())
-        if (methodName != methodName.toCamelCase()) addLuauName(funcBuilder, methodName)
+            .addSummary(method.summary)
+            .addDeprecation(method.deprecationMessage)
+            .addTags(method.tags)
+
+        if (methodName != methodName.toCamelCase()) funcBuilder.addLuauName(methodName)
         if (external) funcBuilder.addModifiers(KModifier.EXTERNAL) else funcBuilder.addModifiers(KModifier.ABSTRACT)
 
         method.parameters?.let { funcBuilder.addParameters(it.map(::generateParameter)) }
@@ -872,10 +510,6 @@ internal class RobloxTypeGenerator() {
         } else if (method.returns.size == 1 && method.returns[0].type != "()") {
             funcBuilder.returns(typeOf(method.returns[0].type))
         }
-
-        addSummary(funcBuilder, method.summary)
-        addDeprecation(funcBuilder, method.deprecationMessage)
-        addTags(funcBuilder, method.tags)
 
         return listOf(funcBuilder.build())
     }
@@ -955,51 +589,4 @@ internal class RobloxTypeGenerator() {
 
         return typeName.copy(isNullable)
     }
-
-    private fun String.toCamelCase(): String = this.first().lowercase() + this.substring(1)
-
-    private fun <T> cartesianProduct(sets: List<List<T>>): List<List<T>> =
-        sets.fold(listOf(emptyList())) { acc, set ->
-            acc.flatMap { prefix -> set.map { prefix + it } }
-        }
-
-    private fun operatorToString(operator: String): String = when (operator) {
-        "+" -> "plus"
-        "-" -> "minus"
-        "*" -> "times"
-        "/" -> "div"
-        "%" -> "rem"
-        "//" -> "floorDiv"
-        else -> error("$operator is not an operator")
-    }
-
-    private fun List<FunSpec>.removeDuplicatesBySignature(): List<FunSpec> = withIndex()
-        .groupBy { (_, fs) -> fs.name to fs.parameters.map { it.type } }
-        .values
-        .map { sameSignature ->
-            val keepList =
-                if (sameSignature.size > 1)
-                    sameSignature.filterNot { (_, fs) ->
-                        fs.annotations.any { it.typeName == ClassName("kotlin", "Deprecated") }
-                    }.ifEmpty { sameSignature }
-                else
-                    sameSignature
-
-            keepList.minBy { it.index }.value
-        }
-
-    private fun List<PropertySpec>.removeDuplicatesByName(): List<PropertySpec> = withIndex()
-        .groupBy { (_, p) -> p.name }
-        .values
-        .map { sameSignature ->
-            val keepList =
-                if (sameSignature.size > 1)
-                    sameSignature.filterNot { (_, fs) ->
-                        fs.annotations.any { it.typeName == ClassName("kotlin", "Deprecated") }
-                    }.ifEmpty { sameSignature }
-                else
-                    sameSignature
-
-            keepList.minBy { it.index }.value
-        }
 }

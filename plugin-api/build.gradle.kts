@@ -1,8 +1,14 @@
 plugins {
     id("java-gradle-plugin")
     id("maven-publish")
-    kotlin("jvm") version "2.1.20"
+    kotlin("jvm") version "2.2.0"
     kotlin("plugin.serialization") version "1.9.0"
+}
+
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xcontext-parameters")
+    }
 }
 
 dependencies {
