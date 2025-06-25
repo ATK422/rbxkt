@@ -2,18 +2,17 @@ package xyz.atkdev.rbxkt.ir
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
-import org.jetbrains.kotlin.ir.backend.js.utils.valueArguments
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
 import org.jetbrains.kotlin.ir.symbols.IrSymbol
 import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.*
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitor
+import org.jetbrains.kotlin.ir.visitors.IrVisitor
 import xyz.atkdev.rbxkt.luau.LuauImportAnalyzer
 import xyz.atkdev.rbxkt.luau.*
 
-class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNode, Nothing?> {
+class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Nothing?>() {
     private lateinit var currentClass: IrClass
 
     private fun lowerToStmt(node: LuauNode): LuauStmt {
@@ -51,7 +50,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
 
         val owner = expression.symbol.owner
         val name = owner.name.asString()
-        val args = expression.valueArguments
+        val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
         val isSetterGetter = owner.correspondingPropertySymbol != null
@@ -125,7 +124,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val typeParams = declaration.typeParameters.map {
             it.name.asString()
         }
-        val params = declaration.valueParameters.map {
+        val params = declaration.parameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
         val body: List<LuauStmt> = (declaration.body as? IrBlockBody)?.statements
@@ -137,7 +136,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
 
     // TODO: Needs a return type
     override fun visitFunctionExpression(expression: IrFunctionExpression, data: Nothing?): LuauLambdaExpr {
-        val params = expression.function.valueParameters.map {
+        val params = expression.function.parameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
         val body = expression.function.body?.statements
@@ -155,7 +154,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val currentClassName = currentClass.name.asString()
         val targetConstructor = expression.symbol.owner
         val targetClassName = (targetConstructor.parent as IrClass).name.asString()
-        val args = expression.valueArguments
+        val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
         return if (targetClassName == "Any") {
             LuauBlock(listOf())
@@ -180,7 +179,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val typeParameters = declaration.typeParameters.map {
             it.name.asString()
         }
-        val params = declaration.valueParameters.map {
+        val params = declaration.parameters.map {
             LuauParameter(LuauIdentifier(it.name.asString()), LuauTypeSolver.fromIr(it.type))
         }
         var body = declaration.body?.statements?.map {
@@ -241,7 +240,7 @@ class LuauEmitter(private val context: IrPluginContext): IrElementVisitor<LuauNo
         val className = (targetConstructor.parent as IrClass).name.asString()
         val constructorName = getConstructorName(targetConstructor)
 
-        val args = expression.valueArguments
+        val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
         return LuauNamecall(className, constructorName, args)

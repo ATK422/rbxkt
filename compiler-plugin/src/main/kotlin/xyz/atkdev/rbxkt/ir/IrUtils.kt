@@ -9,7 +9,7 @@ fun getConstructorName(constructor: IrConstructor): String {
         "constructor"
     } else {
         "from${
-            constructor.valueParameters.joinToString("And") {
+            constructor.parameters.joinToString("And") {
                 it.name.asString().replaceFirstChar { it.uppercase() }
             }
         }"

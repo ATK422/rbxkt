@@ -1,5 +1,6 @@
 package xyz.atkdev.rbxkt.fir
 
+import org.jetbrains.kotlin.DeprecatedForRemovalCompilerApi
 import org.jetbrains.kotlin.diagnostics.DiagnosticReporter
 import org.jetbrains.kotlin.fir.FirSession
 import org.jetbrains.kotlin.fir.analysis.checkers.MppCheckerKind
@@ -13,9 +14,9 @@ class RbxKtCheckerExtension(session: FirSession): FirAdditionalCheckersExtension
     override val declarationCheckers: DeclarationCheckers = object : DeclarationCheckers() {
         override val fileCheckers: Set<FirFileChecker> = setOf(
             object : FirFileChecker(MppCheckerKind.Common) {
-                override fun check(declaration: FirFile, context: CheckerContext, reporter: DiagnosticReporter) {
+                //override fun check(declaration: FirFile, context: CheckerContext, reporter: DiagnosticReporter) {
 
-                }
+                //}
             }
         )
     }

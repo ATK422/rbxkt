@@ -20,11 +20,11 @@ class RbxKtCompilerPluginRegistrar : CompilerPluginRegistrar() {
         val outDir = configuration.get(ConfigurationKeys.OUTPUT_DIR)?.let { File(it) } ?: File("build/generated/luau")
         PluginEnvironment.logger = configuration.get(CommonConfigurationKeys.MESSAGE_COLLECTOR_KEY, MessageCollector.NONE)
 
-        FirExtensionRegistrarAdapter.registerExtension(object : FirExtensionRegistrar() {
-            override fun ExtensionRegistrarContext.configurePlugin() {
-                +::RbxKtCheckerExtension
-            }
-        })
+//        FirExtensionRegistrarAdapter.registerExtension(object : FirExtensionRegistrar() {
+//            override fun ExtensionRegistrarContext.configurePlugin() {
+//                +::RbxKtCheckerExtension
+//            }
+//        })
 
         IrGenerationExtension.registerExtension(
             LuauIrGenerationExtension(outDir)

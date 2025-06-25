@@ -4,9 +4,9 @@ import org.jetbrains.kotlin.ir.IrElement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.util.*
-import org.jetbrains.kotlin.ir.visitors.IrElementVisitorVoid
+import org.jetbrains.kotlin.ir.visitors.IrVisitorVoid
 
-object LuauImportAnalyzer : IrElementVisitorVoid {
+object LuauImportAnalyzer : IrVisitorVoid() {
     lateinit var currentFilePath: String
     private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
 
