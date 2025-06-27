@@ -31,7 +31,7 @@ internal class RobloxTypeGenerator() {
         internal const val CORRECTIONS_RAW_GITHUB_URL =
             "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
 
-        const val PACKAGE_NAME = "xyz.atkdev.rbxkt.api"
+        const val PACKAGE_NAME = "types"
     }
 
     internal lateinit var annotations: Map<String, AnnotationSpec>
@@ -258,7 +258,23 @@ internal class RobloxTypeGenerator() {
                 .addDeprecation(file.deprecationMessage)
                 .addTags(file.tags)
 
-            file.properties?.let { prop -> interfaceBuilder.addProperties(prop.map { generateProperty(it, false) }) }
+            file.properties?.let { prop ->
+                interfaceBuilder.addProperties(prop.map {
+                    generateProperty(it, false).toBuilder()
+                        .getter(FunSpec.builder("get()")
+                            .addStatement("return TODO()")
+                            .build()
+                        )
+                        .setter(FunSpec.builder("set()")
+                            .addParameter(
+                                "v", Nothing::class.asTypeName()
+                            )
+                            .addStatement("return TODO()")
+                            .build()
+                        )
+                        .build()
+                })
+            }
 
             file.methods?.let { methods ->
                 interfaceBuilder.addFunctions(methods.flatMap {
@@ -267,7 +283,9 @@ internal class RobloxTypeGenerator() {
                         it,
                         companionBuilder,
                         false
-                    )
+                    ).map { method ->
+                        method.toBuilder().addStatement("return TODO()").build()
+                    }
                 })
             }
 
@@ -276,6 +294,11 @@ internal class RobloxTypeGenerator() {
                 val propertyBuilder = PropertySpec.builder(eventName.toCamelCase(), datatypes["RBXScriptConnection"]!!)
                     .addSummary(event.summary)
                     .addDeprecation(event.deprecationMessage)
+                    .getter(FunSpec.getterBuilder()
+                        .clearBody()
+                        .addStatement("return TODO()")
+                        .build()
+                    )
                     .addTags(event.tags)
 
                 if (eventName != eventName.toCamelCase()) propertyBuilder.addLuauName(eventName)
@@ -295,7 +318,8 @@ internal class RobloxTypeGenerator() {
                 interfaceBuilder.addFunction(
                     FunSpec.builder("get")
                         .addParameter("name", String::class)
-                        .addModifiers(KModifier.OPERATOR, KModifier.ABSTRACT)
+                        .addModifiers(KModifier.OPERATOR) // KModifier.ABSTRACT
+                        .addCode("return TODO()")
                         .returns(classes["Instance"]!!.copy(nullable = true))
                         .build()
                 )
@@ -333,30 +357,30 @@ internal class RobloxTypeGenerator() {
             getInterfaces(name).forEach { ifaceName ->
                 val iface = interfaces[ifaceName]!!
 
-                iface.propertySpecs.forEach { prop ->
-                    val propSpec = prop.toBuilder()
-                        .addModifiers(KModifier.OVERRIDE)
-                        .initializer("TODO()")
-                    propSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
-                    propSpec.kdoc.clear()
-                    builder.addProperty(propSpec.build())
-                }
-
-                iface.funSpecs.forEach { func ->
-                    val funcSpec = func.toBuilder()
-                        .addModifiers(KModifier.OVERRIDE, KModifier.EXTERNAL)
-                    funcSpec.parameters.run {
-                        val clean = map {
-                            it.toBuilder().defaultValue(null).build()
-                        }
-                        clear()
-                        addAll(clean)
-                    }
-                    funcSpec.modifiers.remove(KModifier.ABSTRACT)
-                    funcSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
-                    funcSpec.kdoc.clear()
-                    builder.addFunction(funcSpec.build())
-                }
+//                iface.propertySpecs.forEach { prop ->
+//                    val propSpec = prop.toBuilder()
+//                        .addModifiers(KModifier.OVERRIDE)
+//                        .initializer("TODO()")
+//                    propSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
+//                    propSpec.kdoc.clear()
+//                    builder.addProperty(propSpec.build())
+//                }
+//
+//                iface.funSpecs.forEach { func ->
+//                    val funcSpec = func.toBuilder()
+//                        .addModifiers(KModifier.OVERRIDE, KModifier.EXTERNAL)
+//                    funcSpec.parameters.run {
+//                        val clean = map {
+//                            it.toBuilder().defaultValue(null).build()
+//                        }
+//                        clear()
+//                        addAll(clean)
+//                    }
+//                    funcSpec.modifiers.remove(KModifier.ABSTRACT)
+//                    funcSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
+//                    funcSpec.kdoc.clear()
+//                    builder.addFunction(funcSpec.build())
+//                }
             }
 
             if (!file.tags.contains("Service")) {
@@ -514,7 +538,7 @@ internal class RobloxTypeGenerator() {
             .addTags(method.tags)
 
         if (methodName != methodName.toCamelCase()) funcBuilder.addLuauName(methodName)
-        if (external) funcBuilder.addModifiers(KModifier.EXTERNAL) else funcBuilder.addModifiers(KModifier.ABSTRACT)
+        if (external) funcBuilder.addModifiers(KModifier.EXTERNAL) //else funcBuilder.addModifiers(KModifier.ABSTRACT)
 
         method.parameters?.let { funcBuilder.addParameters(it.map(::generateParameter)) }
 

@@ -13,6 +13,11 @@ sealed interface LuauStmt : LuauNode {
     fun render(builder: IndentedStringBuilder)
 }
 
+object LuauNoOp : LuauExpr {
+    override fun render() = ""
+    override fun display(builder: IndentedStringBuilder) {}
+}
+
 data class LuauStmtExpr(val expr: LuauStmt) : LuauExpr {
     override fun render(): String {
         val builder = IndentedStringBuilder()
@@ -96,6 +101,11 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
             builder.indent { exports.forEach { it.display(builder) } }
         }
     }
+}
+
+data class LuauUnaryOp(val operator: String, val operand: LuauIdentifier) : LuauExpr {
+    override fun render() = "$operator${operand.render()}"
+    override fun display(builder: IndentedStringBuilder) { builder.line("LuauUnaryOp operator=$operator operand=${operand.display(builder)}") }
 }
 
 data class LuauIdentifier(val name: String) : LuauExpr {
@@ -199,19 +209,15 @@ data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauSt
     }
 }
 
-data class LuauBlock(val body: List<LuauStmt>): LuauExpr {
-    override fun render(): String {
-        if (body.isEmpty()) return ""
-
-        val builder = IndentedStringBuilder()
+data class LuauBlock(val body: List<LuauStmt>): LuauStmt {
+    override fun render(builder: IndentedStringBuilder) {
         builder.line("do")
         builder.indent {
             for (stmt in body) {
                 stmt.render(builder)
             }
         }
-        builder.append("end")
-        return builder.toString()
+        builder.line("end")
     }
 
     override fun display(builder: IndentedStringBuilder) {
@@ -296,12 +302,12 @@ data class LuauClass(
     }
 }
 
-data class LuauVarDecl(val name: String, val type: String, val init: LuauExpr?) : LuauStmt {
+data class LuauVarDecl(val name: LuauIdentifier, val type: String, val init: LuauExpr?) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
-        builder.line("local $name: $type = ${init?.render() ?: "nil"}")
+        builder.line("local ${name.render()}: $type = ${init?.render() ?: "nil"}")
     }
     override fun display(builder: IndentedStringBuilder) {
-        builder.line("LuauVarDecl name=$name type=$type")
+        builder.line("LuauVarDecl name=${name.display(builder)} type=$type")
         builder.indent { init?.display(builder) }
     }
 }
@@ -324,5 +330,47 @@ data class LuauReturn(val args: List<LuauExpr>) : LuauStmt {
     override fun display(builder: IndentedStringBuilder) {
         builder.line("LuauReturn")
         builder.indent { args.forEach { it.display(builder) } }
+    }
+}
+
+data class LuauForLoop(
+    val variable: LuauIdentifier,
+    val start: LuauExpr,
+    val end: LuauExpr,
+    val step: LuauExpr,
+    val body: List<LuauStmt>,
+    val init: List<LuauStmt>
+) : LuauStmt {
+    override fun render(builder: IndentedStringBuilder) {
+        for (stmt in init) {
+            stmt.render(builder)
+        }
+        builder.line("for ${variable.render()} = ${start.render()}, ${end.render()}, ${step.render()} do")
+        builder.indent {
+            for (stmt in body) {
+                stmt.render(builder)
+            }
+        }
+        builder.line("end")
+    }
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("ForLoop")
+    }
+}
+
+data class LuauWhileLoop(val condition: LuauExpr, val body: List<LuauStmt>) : LuauStmt {
+    override fun render(builder: IndentedStringBuilder) {
+        builder.line("while (${condition.render()}) do")
+        builder.indent {
+            for (stmt in body) {
+                stmt.render(builder)
+            }
+        }
+        builder.line("end")
+    }
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("WhileLoop")
     }
 }

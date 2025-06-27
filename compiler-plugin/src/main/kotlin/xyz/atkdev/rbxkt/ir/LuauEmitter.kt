@@ -2,6 +2,7 @@ package xyz.atkdev.rbxkt.ir
 
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.ir.IrElement
+import org.jetbrains.kotlin.ir.IrStatement
 import org.jetbrains.kotlin.ir.declarations.*
 import org.jetbrains.kotlin.ir.expressions.*
 import org.jetbrains.kotlin.ir.symbols.IrClassSymbol
@@ -66,6 +67,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 "times" -> "*"
                 "div" -> "/"
                 "rem" -> "%"
+                "rangeTo" -> ""
                 else -> error("Unhandled numeric operator: $name")
             }
 
@@ -157,7 +159,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
         return if (targetClassName == "Any") {
-            LuauBlock(listOf())
+            LuauNoOp
         } else {
             if (currentClassName == targetClassName) {
                 LuauStmtExpr(LuauReturn(listOf(LuauNamecall("self", "constructor", args))))
@@ -189,7 +191,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         if (declaration.isPrimary) {
             if (superClass != null) {
                 val superClassName = superClass.name.asString()
-                body = listOf(LuauVarDecl("self", className, LuauCall("setmetatable", listOf(
+                body = listOf(LuauVarDecl(LuauIdentifier("self"), className, LuauCall("setmetatable", listOf(
                     LuauIdentifier("{}"),
                     LuauIdentifier(className)
                 ))), LuauAssign("self.super", LuauCall("setmetatable", listOf(
@@ -197,7 +199,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                     LuauIdentifier(superClassName)
                 )))) + body
             } else {
-                body = listOf(LuauVarDecl("self", className, LuauCall("setmetatable", listOf(
+                body = listOf(LuauVarDecl(LuauIdentifier("self"), className, LuauCall("setmetatable", listOf(
                     LuauIdentifier("{}"),
                     LuauIdentifier(className)
                 )))) + body
@@ -261,7 +263,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
     override fun visitVariable(declaration: IrVariable, data: Nothing?): LuauVarDecl {
         val name = declaration.name.asString()
         val init = declaration.initializer?.accept(this, data) as LuauExpr?
-        return LuauVarDecl(name, LuauTypeSolver.fromIr(declaration.type), init)
+        return LuauVarDecl(LuauIdentifier(name), LuauTypeSolver.fromIr(declaration.type), init)
     }
 
     override fun visitGetValue(expression: IrGetValue, data: Nothing?): LuauExpr {
@@ -287,5 +289,127 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
     override fun visitReturn(expression: IrReturn, data: Nothing?): LuauReturn {
         val args = expression.value.accept(this, data) as LuauExpr
         return LuauReturn(listOf(args))
+    }
+
+    override fun visitWhileLoop(loop: IrWhileLoop, data: Nothing?): LuauWhileLoop {
+        val condition = loop.condition.accept(this, data) as LuauExpr
+        val body: List<LuauStmt> = when(val b = loop.body!!) {
+            is IrBlock -> b.statements.map { lowerToStmt(it.accept(this, data)) }
+            else -> listOf(lowerToStmt(b.accept(this, data)))
+        }
+        return LuauWhileLoop(condition, body)
+    }
+
+    override fun visitBlock(expression: IrBlock, data: Nothing?): LuauStmt {
+        if (expression.origin == IrStatementOrigin.FOR_LOOP) {
+            return visitForLoop(expression, data)
+        }
+        return LuauBlock(expression.statements.map { lowerToStmt(it.accept(this, data)) })
+    }
+
+    fun visitForLoop(expression: IrBlock, data: Nothing?): LuauForLoop {
+        val iterVar = expression.statements[0] as IrVariable
+        val loop = expression.statements[1] as IrWhileLoop
+        val loopBody = loop.body as IrBlock
+        val loopVar = loopBody.statements[0] as IrVariable
+        val loopBodyStmts: List<IrStatement> = loopBody.statements.drop(1).flatMap { stmt ->
+            when (stmt) {
+                is IrBlock -> stmt.statements
+                else -> listOf(stmt)
+            }
+        }
+
+        val iteratorType = iterVar.type.classFqName?.asString() ?: error("Missing iterator type")
+        val loopVarName = LuauIdentifier(loopVar.name.asString())
+
+        val (range, init, body) = when (iteratorType) {
+            "kotlin.collections.IntIterator" -> handleIntIterator(iterVar.initializer, loopBodyStmts, loopVarName, data)
+            "kotlin.collections.CharIterator" -> handleCharIterator(iterVar.initializer, loopBodyStmts, loopVarName, data)
+            else -> error("Unhandled iterator type: $iteratorType")
+        }
+
+        return LuauForLoop(
+            loopVarName,
+            range.first,
+            range.second,
+            range.third,
+            body,
+            init
+        )
+    }
+
+    private fun handleIntIterator(
+        initializer: IrExpression?,
+        loopStmts: List<IrStatement>,
+        loopVarName: LuauIdentifier,
+        data: Nothing?
+    ): Triple<Triple<LuauExpr, LuauExpr, LuauExpr>, List<LuauStmt>, List<LuauStmt>> {
+        var stepAmount: Int? = null
+        var current = (initializer as IrCall).arguments[0] as IrCall
+        while (true) {
+            val name = current.symbol.owner.name.asString()
+            if (name == "step" && stepAmount == null) {
+                val stepArg = current.arguments[1] as IrConst
+                val stepValue = stepArg.value as Int
+                stepAmount = stepValue
+            } else if (name != "step") {
+                break
+            }
+
+            val receiver = current.arguments[0]
+            if (receiver is IrCall) {
+                current = receiver
+            } else break
+        }
+
+        val iterName = current.symbol.owner.name.asString()
+        if (stepAmount == null) {
+            stepAmount = 1
+        }
+
+        if (iterName == "downTo") {
+            stepAmount = -stepAmount
+        }
+
+        val start = current.arguments[0]?.accept(this, data) as LuauExpr
+        val end = current.arguments[1]?.accept(this, data) as LuauExpr
+
+        val range = Triple(
+            start,
+            end,
+            LuauNumberLiteral(stepAmount)
+        )
+        val body = loopStmts.map { lowerToStmt(it.accept(this, data)) }
+        return Triple(range, emptyList(), body)
+    }
+
+    private fun handleCharIterator(
+        initializer: IrExpression?,
+        loopStmts: List<IrStatement>,
+        loopVarName: LuauIdentifier,
+        data: Nothing?
+    ): Triple<Triple<LuauExpr, LuauExpr, LuauExpr>, List<LuauStmt>, List<LuauStmt>> {
+        val backingVarName = LuauIdentifier("${loopVarName.name}V")
+        val strExpr = (initializer as IrCall).arguments[0]?.accept(this, data) as LuauExpr
+        val initStmt = LuauVarDecl(backingVarName, "string", strExpr)
+
+        val range = Triple(
+            LuauNumberLiteral(1),
+            LuauUnaryOp("#", backingVarName),
+            LuauNumberLiteral(1)
+        )
+
+        val charExtractStmt = LuauVarDecl(
+            LuauIdentifier(loopVarName.name),
+            "string",
+            LuauCall("string.sub", listOf(
+                backingVarName,
+                loopVarName,
+                loopVarName
+            ))
+        )
+
+        val bodyStmts = loopStmts.map { lowerToStmt(it.accept(this, data)) }
+        return Triple(range, listOf(initStmt), listOf(charExtractStmt) + bodyStmts)
     }
 }
