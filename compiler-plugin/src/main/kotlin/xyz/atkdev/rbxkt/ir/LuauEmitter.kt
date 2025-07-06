@@ -71,8 +71,9 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 else -> error("Unhandled numeric operator: $name")
             }
 
-            val rhs = args.getOrNull(0) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(receiver!!, op, rhs)
+            val lhs = args.getOrNull(0) ?: error("Expected lhs for numeric operator")
+            val rhs = args.getOrNull(1) ?: error("Expected rhs for numeric operator")
+            return LuauBinaryExpr(lhs, op, rhs)
         } else if (isSuperCall) {
             return LuauNamecall("self.super", name, args)
         } else if (isSetterGetter) {
@@ -95,11 +96,10 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                     return LuauIdentifier("$receiverName.$name")
                 }
             } else {
-                var args: List<LuauExpr> = listOf()
                 if (isSetter) {
-                    args = listOf(args.first())
+                    return LuauNamecall(receiverName, name, listOf(args.first()))
                 }
-                return LuauNamecall(receiverName, name, args)
+                return LuauNamecall(receiverName, name, listOf())
             }
         }
 
@@ -241,6 +241,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         val targetConstructor = expression.symbol.owner
         val className = (targetConstructor.parent as IrClass).name.asString()
         val constructorName = getConstructorName(targetConstructor)
+        val constructorType = expression.type.classFqName!!.asString()
 
         val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
@@ -262,8 +263,8 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
 
     override fun visitVariable(declaration: IrVariable, data: Nothing?): LuauVarDecl {
         val name = declaration.name.asString()
-        val init = declaration.initializer?.accept(this, data) as LuauExpr?
-        return LuauVarDecl(LuauIdentifier(name), LuauTypeSolver.fromIr(declaration.type), init)
+        val init = declaration.initializer?.accept(this, data)
+        return LuauVarDecl(LuauIdentifier(name), LuauTypeSolver.fromIr(declaration.type), init as LuauExpr)
     }
 
     override fun visitGetValue(expression: IrGetValue, data: Nothing?): LuauExpr {
@@ -411,5 +412,25 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
 
         val bodyStmts = loopStmts.map { lowerToStmt(it.accept(this, data)) }
         return Triple(range, listOf(initStmt), listOf(charExtractStmt) + bodyStmts)
+    }
+
+    override fun visitBranch(branch: IrBranch, data: Nothing?): LuauBranch {
+        val condition = branch.condition.accept(this, data) as LuauExpr
+        val result = (branch.result as IrBlock).statements.map {
+            lowerToStmt(it.accept(this, data))
+        }
+        return LuauBranch.Conditional(condition, result)
+    }
+
+    override fun visitElseBranch(branch: IrElseBranch, data: Nothing?): LuauBranch {
+        val result = (branch.result as IrBlock).statements.map {
+            lowerToStmt(it.accept(this, data))
+        }
+        return LuauBranch.Else(result)
+    }
+
+    override fun visitWhen(expression: IrWhen, data: Nothing?): LuauWhen {
+        val branches = expression.branches.map { it.accept(this, data) as LuauBranch  }
+        return LuauWhen(branches)
     }
 }

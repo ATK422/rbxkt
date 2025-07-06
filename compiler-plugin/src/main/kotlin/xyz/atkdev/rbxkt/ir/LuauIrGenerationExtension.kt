@@ -59,7 +59,7 @@ class LuauIrGenerationExtension(
 
             val fileName = irFile.nameWithoutExtension
             File(relativeDir, "$fileName.luau").writeText(code)
-            File(relativeDir,  "$fileName.luauast").writeText(astBuilder.toString())
+            File(relativeDir, "$fileName.luauast").writeText(astBuilder.toString())
             File(relativeDir, "$fileName.ir").writeText(irFile.dump())
         }
     }

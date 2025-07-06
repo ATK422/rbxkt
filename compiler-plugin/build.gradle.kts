@@ -2,7 +2,7 @@ plugins {
     id("java-gradle-plugin")
     id("maven-publish")
     id("com.github.gmazzo.buildconfig")
-    kotlin("jvm")
+    kotlin("jvm") version "2.2.0"
     kotlin("plugin.serialization") version "1.9.0"
 }
 

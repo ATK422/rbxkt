@@ -26,7 +26,7 @@ data class LuauStmtExpr(val expr: LuauStmt) : LuauExpr {
     }
 
     override fun display(builder: IndentedStringBuilder) {
-        builder.line("LuauExprStmt")
+        builder.line("LuauStmtExpr")
         builder.indent { expr.display(builder) }
     }
 }
@@ -39,6 +39,26 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
     override fun display(builder: IndentedStringBuilder) {
         builder.line("LuauExprStmt")
         builder.indent { expr.display(builder) }
+    }
+}
+
+sealed class LuauBranch() : LuauNode {
+    data class Conditional(val condition: LuauExpr, val result: List<LuauStmt>) : LuauBranch() {
+        override fun display(builder: IndentedStringBuilder) {
+            builder.line("LuauBranch.Conditional condition=${condition.display(builder)}")
+            builder.indent {
+                result.forEach { it.display(builder) }
+            }
+        }
+    }
+
+    data class Else(val result: List<LuauStmt>) : LuauBranch() {
+        override fun display(builder: IndentedStringBuilder) {
+            builder.line("LuauBranch.Else")
+            builder.indent {
+                result.forEach { it.display(builder) }
+            }
+        }
     }
 }
 
@@ -139,8 +159,7 @@ data class LuauInterpolatedStringLiteral(val args: List<LuauExpr>) : LuauExpr {
 data class LuauParameter(val name: LuauIdentifier, val type: String) : LuauExpr {
     override fun render() = "${name.render()}: $type"
     override fun display(builder: IndentedStringBuilder) {
-        builder.line("LuauParameter type=$type")
-        builder.indent { name.display(builder) }
+        builder.line("LuauParameter name=$name type=$type")
     }
 }
 
@@ -356,6 +375,23 @@ data class LuauForLoop(
 
     override fun display(builder: IndentedStringBuilder) {
         builder.line("ForLoop")
+        builder.indent {
+            builder.line("start=${start.display(builder)}")
+            builder.line("end=${end.display(builder)}")
+            builder.line("step=${step.display(builder)}")
+            builder.line("Init")
+            builder.indent {
+                init.forEach {
+                    it.display(builder)
+                }
+            }
+            builder.line("Body")
+            builder.indent {
+                body.forEach {
+                    it.display(builder)
+                }
+            }
+        }
     }
 }
 
@@ -371,6 +407,48 @@ data class LuauWhileLoop(val condition: LuauExpr, val body: List<LuauStmt>) : Lu
     }
 
     override fun display(builder: IndentedStringBuilder) {
-        builder.line("WhileLoop")
+        builder.line("WhileLoop condition=${condition.display(builder)}")
+        builder.line("Body")
+        builder.indent {
+            body.forEach { it.display(builder) }
+        }
+    }
+}
+
+data class LuauWhen(val branches: List<LuauBranch>) : LuauStmt {
+    override fun render(builder: IndentedStringBuilder) {
+        branches.forEachIndexed { index, branch ->
+            val keyword = when(branch) {
+                is LuauBranch.Conditional -> if (index == 0) "if" else "elseif"
+                is LuauBranch.Else -> "else"
+            }
+
+            if (branch is LuauBranch.Conditional) {
+                val condition = branch.condition.render()
+                builder.line("$keyword $condition then")
+                builder.indent {
+                    branch.result.forEach {
+                        it.render(builder)
+                    }
+                }
+            } else if (branch is LuauBranch.Else) {
+                builder.line("else")
+                builder.indent {
+                    branch.result.forEach {
+                        it.render(builder)
+                    }
+                }
+            }
+        }
+
+        builder.line("end")
+    }
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("When")
+        builder.line("Branches")
+        builder.indent {
+            branches.forEach { it.display(builder) }
+        }
     }
 }

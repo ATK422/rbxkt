@@ -11,7 +11,7 @@ object ConfigurationKeys {
 }
 
 class RbxKtCommandLineProcessor() : CommandLineProcessor {
-    override val pluginId: String = "xyz.atkdev.rbxkt"
+    override val pluginId: String = "com.rbxkt"
     override val pluginOptions: Collection<AbstractCliOption> = listOf(
         CliOption(
             optionName = "outputDir",
