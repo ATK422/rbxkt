@@ -2,7 +2,7 @@ plugins {
     id("java-gradle-plugin")
     id("maven-publish")
     id("com.github.gmazzo.buildconfig")
-    kotlin("jvm")
+    kotlin("jvm") version "2.2.0"
 }
 
 repositories {
@@ -29,25 +29,25 @@ dependencies {
 buildConfig {
     packageName(project.group.toString())
 
+
+    val compilerProject = project(":compiler-plugin")
+    buildConfigField("String", "KOTLIN_PLUGIN_GROUP", "\"${compilerProject.group}\"")
+    buildConfigField("String", "KOTLIN_PLUGIN_NAME", "\"${compilerProject.name}\"")
+    buildConfigField("String", "KOTLIN_PLUGIN_VERSION", "\"${compilerProject.version}\"")
     buildConfigField("String", "KOTLIN_PLUGIN_ID", "\"${rootProject.group}\"")
 
-    val pluginProject = project(":compiler-plugin")
-    buildConfigField("String", "KOTLIN_PLUGIN_GROUP", "\"${pluginProject.group}\"")
-    buildConfigField("String", "KOTLIN_PLUGIN_NAME", "\"${pluginProject.name}\"")
-    buildConfigField("String", "KOTLIN_PLUGIN_VERSION", "\"${pluginProject.version}\"")
-
-    val apiProject = project(":plugin-api")
+    val typeProject = project(":types")
     buildConfigField(
         type = "String",
-        name = "API_COORDINATES",
-        expression = "\"${apiProject.group}:${apiProject.name}:${apiProject.version}\""
+        name = "TYPE_COORDINATES",
+        expression = "\"${typeProject.group}:${typeProject.name}:${typeProject.version}\""
     )
 }
 
 gradlePlugin {
     plugins {
         create("RbxKtPlugin") {
-            id = "xyz.atkdev.rbxkt"
+            id = "com.rbxkt"
             displayName = "RbxKtPlugin"
             description = "RbxKtPlugin"
             implementationClass = "xyz.atkdev.rbxkt.RbxKtGradlePlugin"

@@ -1,6 +1,7 @@
 package xyz.atkdev.rbxkt
 
-import xyz.atkdev.rbxkt.BuildConfig.API_COORDINATES
+import com.rbxkt.BuildConfig
+import com.rbxkt.BuildConfig.TYPE_COORDINATES
 import org.gradle.api.Project
 import org.gradle.api.provider.Provider
 import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
@@ -27,7 +28,7 @@ class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
     override fun getPluginArtifact(): SubpluginArtifact = SubpluginArtifact(
         groupId = BuildConfig.KOTLIN_PLUGIN_GROUP,
         artifactId = BuildConfig.KOTLIN_PLUGIN_NAME,
-        version = BuildConfig.KOTLIN_PLUGIN_VERSION,
+        version = BuildConfig.KOTLIN_PLUGIN_VERSION
     )
 
     override fun applyToCompilation(
@@ -36,13 +37,12 @@ class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
         val project = kotlinCompilation.target.project
 
         kotlinCompilation.dependencies {
-            implementation(API_COORDINATES)
+            implementation(TYPE_COORDINATES)
         }
 
         return project.provider {
             val extension = project.extensions.getByType(RbxKtGradleExtension::class.java)
             val outputDir = extension.outputDir.orNull ?: "${project.layout.buildDirectory.get().asFile.absolutePath}/out"
-
             listOf(
                 SubpluginOption("outputDir", outputDir)
             )
