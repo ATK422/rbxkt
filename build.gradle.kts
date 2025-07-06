@@ -5,46 +5,25 @@ plugins {
 }
 
 allprojects {
-    group = "xyz.atkdev.rbxkt"
+    group = "com.rbxkt"
     version = "1.0.0"
 }
 
 tasks.register("buildAll") {
+    group = "build"
     dependsOn(
-        ":plugin-api:build",
+        ":types:build",
         ":compiler-plugin:build",
         ":gradle-plugin:build"
     )
 }
 
-tasks.register("publishAllPlugins") {
-    dependsOn(
-        "buildAll",
-        ":plugin-api:publish",
-        ":compiler-plugin:publish",
-        ":gradle-plugin:publish"
-    )
-
-    if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
-        finalizedBy("buildSample")
-    }
-}
-
 tasks.register("publishAllPluginsLocal") {
+    group = "publishing"
     dependsOn(
         "buildAll",
-        ":plugin-api:publishToMavenLocal",
+        ":types:publishToMavenLocal",
         ":compiler-plugin:publishToMavenLocal",
         ":gradle-plugin:publishToMavenLocal"
     )
-
-    if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
-        finalizedBy("buildSample")
-    }
-}
-
-if (!gradle.startParameter.projectProperties.containsKey("withoutSample")) {
-    tasks.register("buildSample") {
-        dependsOn(gradle.includedBuild("sample").task(":CompileAll"))
-    }
 }
