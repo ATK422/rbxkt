@@ -1,4 +1,4 @@
-package types.models
+package com.rbxkt.typegen.models
 
 import kotlinx.serialization.Serializable
 

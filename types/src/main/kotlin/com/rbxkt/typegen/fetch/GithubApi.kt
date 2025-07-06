@@ -1,6 +1,9 @@
-package types.fetch
+package com.rbxkt.typegen.fetch
 
 import com.charleskorn.kaml.Yaml
+import com.rbxkt.typegen.generator.DocsModel
+import com.rbxkt.typegen.models.GithubFileTreeResponse
+import com.rbxkt.typegen.models.GithubTree
 import io.ktor.client.*
 import io.ktor.client.engine.cio.*
 import io.ktor.client.request.*
@@ -10,9 +13,6 @@ import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.Json
-import types.generator.DocsModel
-import types.models.GithubFileTreeResponse
-import types.models.GithubTree
 
 private val json = Json { ignoreUnknownKeys = true }
 private val yaml = Yaml(configuration = Yaml.default.configuration.copy(strictMode = false))
@@ -31,6 +31,7 @@ internal object GithubApi {
                 append("Accept", "application/json")
             }
         }
+        if (response.status.value != 200) error("status: ${response.status} url: $BASE_GITHUB_URL/$url")
         // TODO: i love error handling
         val text = response.bodyAsText()
         val body = json.decodeFromString<GithubFileTreeResponse>(text)

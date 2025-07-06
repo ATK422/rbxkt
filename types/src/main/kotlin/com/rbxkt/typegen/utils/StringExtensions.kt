@@ -1,4 +1,4 @@
-package types.utils
+package com.rbxkt.typegen.utils
 
 internal fun String.toCamelCase(): String = this.first().lowercase() + this.substring(1)
 

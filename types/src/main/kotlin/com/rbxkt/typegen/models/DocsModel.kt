@@ -1,9 +1,9 @@
-package types.models
+package com.rbxkt.typegen.models
 
+import com.rbxkt.typegen.generator.DocsModel
+import com.rbxkt.typegen.serializers.AlwaysStringSerializer
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
-import types.generator.DocsModel
-import types.serializers.AlwaysStringSerializer
 
 @Serializable
 internal data class EnumModel(

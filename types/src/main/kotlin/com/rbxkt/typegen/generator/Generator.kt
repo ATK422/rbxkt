@@ -1,12 +1,28 @@
-package types.generator
+package com.rbxkt.typegen.generator
 
-import annotations.LuauName
+import com.rbxkt.typegen.fetch.GithubApi
+import com.rbxkt.typegen.models.ClassModel
+import com.rbxkt.typegen.models.CorrectionsModel
+import com.rbxkt.typegen.models.DatatypeModel
+import com.rbxkt.typegen.models.EnumModel
+import com.rbxkt.typegen.models.Method
+import com.rbxkt.typegen.models.Parameter
+import com.rbxkt.typegen.models.Property
+import com.rbxkt.typegen.models.Return
+import com.rbxkt.typegen.models.SchemaModel
+import com.rbxkt.typegen.utils.addDeprecation
+import com.rbxkt.typegen.utils.addJvmName
+import com.rbxkt.typegen.utils.addLuauName
+import com.rbxkt.typegen.utils.addSummary
+import com.rbxkt.typegen.utils.addTags
+import com.rbxkt.typegen.utils.cartesianProduct
+import com.rbxkt.typegen.utils.dedupeFunSpecs
+import com.rbxkt.typegen.utils.dedupePropertySpecs
+import com.rbxkt.typegen.utils.fromOperator
+import com.rbxkt.typegen.utils.toCamelCase
 import com.squareup.kotlinpoet.*
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import kotlinx.coroutines.*
-import types.fetch.GithubApi
-import types.models.*
-import types.utils.*
 import java.io.File
 
 private val logger = System.getLogger("type gen")
@@ -31,7 +47,7 @@ internal class RobloxTypeGenerator() {
         internal const val CORRECTIONS_RAW_GITHUB_URL =
             "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
 
-        const val PACKAGE_NAME = "types"
+        const val PACKAGE_NAME = "com.rbxkt.types"
     }
 
     internal lateinit var annotations: Map<String, AnnotationSpec>
@@ -47,7 +63,7 @@ internal class RobloxTypeGenerator() {
             .useSiteTarget(AnnotationSpec.UseSiteTarget.FILE)
             .addMember(
                 "%L",
-                "\"unused\", \"unused_parameter\", \"RedundantVisibilityModifier\", \"RemoveRedundantQualifierName\", \"SpellCheckingInspection\", \"DEPRECATION\""
+                "\"unused\", \"unused_parameter\", \"RedundantVisibilityModifier\", \"RemoveRedundantQualifierName\", \"SpellCheckingInspection\", \"DEPRECATION\", \"INAPPLICABLE_JVM_NAME\""
             )
             .build()
 
@@ -80,11 +96,15 @@ internal class RobloxTypeGenerator() {
             launch { generateDataTypes(dataTypeModels, dataTypeModelSpec) }
             launch { generateClasses(classModels, classModelSpec) }
         }
+        
+        val generatedDir = File(System.getProperty("user.dir") + "/src/generated/")
+        generatedDir.deleteRecursively()
+        generatedDir.mkdirs()
 
-        annotationFileSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
-        enumModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
-        dataTypeModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
-        classModelSpec.build().writeTo(File(System.getProperty("user.dir") + "/src/api/"))
+        annotationFileSpec.build().writeTo(generatedDir)
+        enumModelSpec.build().writeTo(generatedDir)
+        dataTypeModelSpec.build().writeTo(generatedDir)
+        classModelSpec.build().writeTo(generatedDir)
     }
 
     private suspend fun getCorrections(): Map<String, Map<String, CorrectionData>> {
@@ -114,6 +134,58 @@ internal class RobloxTypeGenerator() {
             (schema.definitions.tags.items.enum + schema.definitions.threadSafety.enum + schema.definitions.securityTags.enum)
                 .filterNot { it == "Deprecated" }
                 .toMutableSet()
+
+        val nativeAnnotation = TypeSpec.annotationBuilder("Native")
+            .addAnnotation(
+                AnnotationSpec.builder(Target::class)
+                    .addMember("%T.FILE", AnnotationTarget::class)
+                    .build()
+            )
+            .build()
+
+        val optimizeAnnotation = TypeSpec.annotationBuilder("Optimize")
+            .addAnnotation(
+                AnnotationSpec.builder(Target::class)
+                    .addMember("%T.FILE", AnnotationTarget::class)
+                    .build()
+            )
+            .addProperty(
+                PropertySpec.builder("level", Int::class)
+                    .initializer("level")
+                    .build()
+            )
+            .primaryConstructor(
+                FunSpec.constructorBuilder()
+                    .addParameter("level", Int::class)
+                    .build()
+            )
+            .build()
+
+        val entrypointAnnotation = TypeSpec.annotationBuilder("Entrypoint")
+            .addAnnotation(
+                AnnotationSpec.builder(Target::class)
+                    .addMember("%T.FUNCTION", AnnotationTarget::class)
+                    .build()
+            )
+            .build()
+
+        val luauNameAnnotation = TypeSpec.annotationBuilder("LuauName")
+            .addProperty(
+                PropertySpec.builder("name", String::class)
+                    .initializer("name")
+                    .build()
+            )
+            .primaryConstructor(
+                FunSpec.constructorBuilder()
+                    .addParameter("name", String::class)
+                    .build()
+            )
+            .build()
+
+        fileSpec.addType(nativeAnnotation)
+        fileSpec.addType(optimizeAnnotation)
+        fileSpec.addType(entrypointAnnotation)
+        fileSpec.addType(luauNameAnnotation)
 
         combinedNames.forEach {
             fileSpec.addType(
@@ -161,7 +233,7 @@ internal class RobloxTypeGenerator() {
                 val isDefaultBuilder = funcName == "new"
 
                 val funcBuilder =
-                    if (isDefaultBuilder) FunSpec.constructorBuilder() else FunSpec.builder(funcName.toCamelCase())
+                    if (isDefaultBuilder) FunSpec.constructorBuilder() else FunSpec.Companion.builder(funcName.toCamelCase())
                         .addSummary(constructor.summary)
                         .addDeprecation(constructor.deprecationMessage)
                         .addTags(constructor.tags)
@@ -259,7 +331,9 @@ internal class RobloxTypeGenerator() {
                 .addTags(file.tags)
 
             file.properties?.let { prop ->
-                interfaceBuilder.addProperties(prop.map {
+                interfaceBuilder.addProperties(prop
+                    .filter { it.name != "Playing" && name != "Sound" }
+                    .map {
                     generateProperty(it, false).toBuilder()
                         .getter(FunSpec.builder("get()")
                             .addStatement("return TODO()")
@@ -315,12 +389,14 @@ internal class RobloxTypeGenerator() {
             )
 
             if (name == "Instance") {
+                val t = TypeVariableName("T", classes["Instance"]!!)
                 interfaceBuilder.addFunction(
                     FunSpec.builder("get")
+                        .addTypeVariable(t)
                         .addParameter("name", String::class)
                         .addModifiers(KModifier.OPERATOR) // KModifier.ABSTRACT
                         .addCode("return TODO()")
-                        .returns(classes["Instance"]!!.copy(nullable = true))
+                        .returns(t.copy(nullable = true))
                         .build()
                 )
             }
@@ -351,56 +427,27 @@ internal class RobloxTypeGenerator() {
                     .addSummary(file.summary)
 
             builder.addSuperinterface(ClassName("$PACKAGE_NAME.classes", "I${name}"))
-            if (name != "Instance") builder.superclass(classes["Instance"]!!)
+            if (name != "Instance" && !file.inherits?.contains("Object")!!) {
+                builder.superclass(classes["Instance"]!!)
+            }
             else builder.addModifiers(KModifier.OPEN)
 
-            getInterfaces(name).forEach { ifaceName ->
-                val iface = interfaces[ifaceName]!!
-
-//                iface.propertySpecs.forEach { prop ->
-//                    val propSpec = prop.toBuilder()
-//                        .addModifiers(KModifier.OVERRIDE)
-//                        .initializer("TODO()")
-//                    propSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
-//                    propSpec.kdoc.clear()
-//                    builder.addProperty(propSpec.build())
-//                }
-//
-//                iface.funSpecs.forEach { func ->
-//                    val funcSpec = func.toBuilder()
-//                        .addModifiers(KModifier.OVERRIDE, KModifier.EXTERNAL)
-//                    funcSpec.parameters.run {
-//                        val clean = map {
-//                            it.toBuilder().defaultValue(null).build()
-//                        }
-//                        clear()
-//                        addAll(clean)
-//                    }
-//                    funcSpec.modifiers.remove(KModifier.ABSTRACT)
-//                    funcSpec.annotations.removeIf { it.typeName == LuauName::class.asTypeName() }
-//                    funcSpec.kdoc.clear()
-//                    builder.addFunction(funcSpec.build())
-//                }
-            }
-
             if (!file.tags.contains("Service")) {
-                builder.addFunction(
-                    FunSpec.constructorBuilder()
-                        .addParameter(
-                            "builder", LambdaTypeName.get(
-                                classes[name]!!,
-                                emptyList(),
-                                UNIT
-                            )
-                        )
-                        .callThisConstructor()
-                        .build()
-                )
-            }
-
-            if (!file.tags.contains("Service")) {
-                if (!file.tags.contains("NotCreatable") || name == "Instance")
+                if (!file.tags.contains("NotCreatable") || name == "Instance") {
                     builder.primaryConstructor(FunSpec.constructorBuilder().build())
+                    builder.addFunction(
+                        FunSpec.constructorBuilder()
+                            .addParameter(
+                                "builder", LambdaTypeName.get(
+                                    classes[name]!!,
+                                    emptyList(),
+                                    UNIT
+                                )
+                            )
+                            .callThisConstructor()
+                            .build()
+                    )
+                }
                 else
                     builder.primaryConstructor(FunSpec.constructorBuilder().addModifiers(KModifier.PRIVATE).build())
             }
@@ -415,12 +462,9 @@ internal class RobloxTypeGenerator() {
         //goofy stuff, but it makes the code much easier to work with
         interfaces.forEach { (_, iface) ->
             val newInterface = iface.toBuilder()
-
-            newInterface.annotations.removeIf { it.typeName != LuauName::class.asTypeName() }
-
             val newProperties = newInterface.propertySpecs.map { prop ->
                 val builder = prop.toBuilder()
-                builder.annotations.removeIf { it.typeName != LuauName::class.asTypeName() }
+                // builder.annotations.removeIf { it.typeName != LuauName::class.asTypeName() }
                 return@map builder.build()
             }
             newInterface.propertySpecs.clear()
@@ -428,7 +472,7 @@ internal class RobloxTypeGenerator() {
 
             val newFunctions = newInterface.funSpecs.map { func ->
                 val builder = func.toBuilder()
-                builder.annotations.removeIf { it.typeName != LuauName::class.asTypeName() }
+                // builder.annotations.removeIf { it.typeName != LuauName::class.asTypeName() }
                 return@map builder.build()
             }
             newInterface.funSpecs.clear()
@@ -537,8 +581,11 @@ internal class RobloxTypeGenerator() {
             .addDeprecation(method.deprecationMessage)
             .addTags(method.tags)
 
-        if (methodName != methodName.toCamelCase()) funcBuilder.addLuauName(methodName)
-        if (external) funcBuilder.addModifiers(KModifier.EXTERNAL) //else funcBuilder.addModifiers(KModifier.ABSTRACT)
+        if (methodName != methodName.toCamelCase()) {
+            funcBuilder.addLuauName(methodName)
+        }
+
+        if (external) funcBuilder.addModifiers(KModifier.EXTERNAL)
 
         method.parameters?.let { funcBuilder.addParameters(it.map(::generateParameter)) }
 
@@ -552,6 +599,12 @@ internal class RobloxTypeGenerator() {
             )
         } else if (method.returns.size == 1 && method.returns[0].type != "()") {
             funcBuilder.returns(typeOf(method.returns[0].type))
+        }
+
+        if (methodName != methodName.toCamelCase()) {
+            if (methodName.startsWith("Set") || methodName.startsWith("Get")) {
+                funcBuilder.addJvmName(methodName)
+            }
         }
 
         return listOf(funcBuilder.build())

@@ -1,4 +1,4 @@
-package types.serializers
+package com.rbxkt.typegen.serializers
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.descriptors.PrimitiveKind

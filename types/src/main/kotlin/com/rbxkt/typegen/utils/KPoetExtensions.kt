@@ -1,16 +1,16 @@
-package types.utils
+package com.rbxkt.typegen.utils
 
-import annotations.LuauName
+import com.rbxkt.typegen.fetch.GithubApi
+import com.rbxkt.typegen.generator.RobloxTypeGenerator
 import com.squareup.kotlinpoet.*
-import types.fetch.GithubApi.BASE_GITHUB_URL
-import types.generator.RobloxTypeGenerator
+import kotlin.text.get
 
 internal fun <B : Documentable.Builder<B>> B.addSummary(summary: String) = apply {
     val modified = summary
         .replace(Regex("(<.*?>)"), "")
         .replace("**", "__")
         .replace("\"", "\\\"")
-        .replace("../../../", BASE_GITHUB_URL.substringBefore("/reference/engine"))
+        .replace("../../../", GithubApi.BASE_GITHUB_URL.substringBefore("/reference/engine"))
     if (modified.isNotEmpty()) addKdoc("%L", modified)
 }
 
@@ -42,8 +42,16 @@ internal fun <B : Annotatable.Builder<B>> B.addTags(tags: List<String>) = apply 
 
 internal fun <B : Annotatable.Builder<B>> B.addLuauName(name: String) = apply {
     addAnnotation(
-        AnnotationSpec.builder(LuauName::class)
+        AnnotationSpec.builder(ClassName("com.rbxkt.types", "LuauName"))
             .addMember("\"%L\"", name).build()
+    )
+}
+
+internal fun <B : Annotatable.Builder<B>> B.addJvmName(name: String) = apply {
+    addAnnotation(
+        AnnotationSpec.builder(JvmName::class.asClassName())
+            .addMember("name = %S", name)
+            .build()
     )
 }
 
