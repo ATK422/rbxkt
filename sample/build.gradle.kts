@@ -2,7 +2,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm") version "2.2.0"
-    id("xyz.atkdev.rbxkt") version "1.0.0"
+    id("com.rbxkt") version "1.0.0"
     `java-library`
 }
 
@@ -24,14 +24,10 @@ tasks.withType<KotlinCompile>().configureEach {
 }
 
 subprojects {
-//    apply(plugin = "org.jetbrains.kotlin.jvm")
-
     repositories {
         mavenLocal()
         mavenCentral()
     }
-
-//    apply(plugin = "xyz.atkdev.rbxkt")
 }
 
 java {
@@ -70,15 +66,11 @@ sourceSets {
     }
 }
 
-tasks.register("CompileAll") {
+tasks.register("compileAll") {
     group = "build"
     dependsOn(
         tasks.named("compileServerKotlin"),
         tasks.named("compileClientKotlin"),
         tasks.named("compileSharedKotlin")
     )
-}
-
-tasks.named("build") {
-    dependsOn(tasks.named("CompileAll"))
 }
