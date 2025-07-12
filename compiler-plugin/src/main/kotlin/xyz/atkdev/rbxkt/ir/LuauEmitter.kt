@@ -56,25 +56,10 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
 
         val isSetterGetter = owner.correspondingPropertySymbol != null
         val isSuperCall = expression.superQualifierSymbol != null
-        val isNumericCall = receiver != null && expression.dispatchReceiver!!.type.run {
-            isNumber() || isInt() || isDouble() || isFloat() || isByte() || isShort() || isLong()
-        }
 
-        if (isNumericCall) {
-            val op = when (name) {
-                "plus" -> "+"
-                "minus" -> "-"
-                "times" -> "*"
-                "div" -> "/"
-                "rem" -> "%"
-                "rangeTo" -> ""
-                else -> error("Unhandled numeric operator: $name")
-            }
-
-            val lhs = args.getOrNull(0) ?: error("Expected lhs for numeric operator")
-            val rhs = args.getOrNull(1) ?: error("Expected rhs for numeric operator")
-            return LuauBinaryExpr(lhs, op, rhs)
-        } else if (isSuperCall) {
+        if (name == "toString")
+            return LuauCall("tostring", listOf(args.first()))
+        else if (isSuperCall) {
             return LuauNamecall("self.super", name, args)
         } else if (isSetterGetter) {
             val property = owner.correspondingPropertySymbol?.owner!!
@@ -101,13 +86,54 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 }
                 return LuauNamecall(receiverName, name, listOf())
             }
-        }
+        } else if (expression.origin != null && args.size == 2 && expression.origin != IrStatementOrigin.EXCLEQ) {
+            val lhs = args[0]
+            val rhs = args[1]
 
-        if (expression.dispatchReceiver != null) {
+            val op = when (expression.origin) {
+                //Numerical Operations
+                IrStatementOrigin.PLUS -> "+"
+                IrStatementOrigin.MINUS -> "-"
+                IrStatementOrigin.MUL -> "*"
+                IrStatementOrigin.DIV -> "/"
+                IrStatementOrigin.PERC -> "%"
+                IrStatementOrigin.PLUSEQ -> "+="
+                IrStatementOrigin.MINUSEQ -> "-="
+                IrStatementOrigin.MULTEQ -> "*="
+                IrStatementOrigin.DIVEQ -> "/="
+                IrStatementOrigin.PERCEQ -> "%="
+
+                //Comparison Operations
+                IrStatementOrigin.LT -> "<"
+                IrStatementOrigin.GT -> ">"
+                IrStatementOrigin.LTEQ -> "<="
+                IrStatementOrigin.GTEQ -> ">="
+                IrStatementOrigin.EQEQ -> "=="
+                IrStatementOrigin.ANDAND -> "and"
+                IrStatementOrigin.OROR -> "or"
+
+                //Custom Handled Expressions
+                IrStatementOrigin.RANGE -> null
+                IrStatementOrigin.RANGE_UNTIL -> null
+                IrStatementOrigin.IN -> null
+                IrStatementOrigin.NOT_IN -> null
+                IrStatementOrigin.POSTFIX_INCR -> null
+                IrStatementOrigin.POSTFIX_DECR -> null
+                else -> error("Unhandled Operator Expression: ${expression.origin}")
+            }
+
+            op?.let {
+                return LuauBinaryExpr(lhs, it, rhs, expression.origin!!.isComparisonOperator() || expression.origin == IrStatementOrigin.EQEQ)
+            }
+        } else if (name == "not" && expression.origin == IrStatementOrigin.EXCLEQ) {
+            val args = (expression.arguments[0] as IrCall).arguments.map { it?.accept(this, data) as LuauExpr }
+            return LuauBinaryExpr(args[0], "!=", args[1], true)
+        } else if (expression.dispatchReceiver != null) {
             val symbol = expression.dispatchReceiver?.javaClass
                 ?.methods?.firstOrNull { it.name == "getSymbol" }
                 ?.invoke(expression.dispatchReceiver) as? IrSymbol
             val owner = symbol?.owner as IrDeclarationWithName
+
             return LuauCall(owner.name.asString(), args)
         }
 
@@ -115,6 +141,14 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         if (name == "println" && owner.getPackageFragment().packageFqName.asString() == "kotlin.io") return LuauCall("print", args)
 
         return LuauCall(name, args)
+    }
+
+    override fun visitTypeOperator(expression: IrTypeOperatorCall, data: Nothing?): LuauNode {
+        return when (expression.operator) {
+            IrTypeOperator.IMPLICIT_CAST, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> expression.argument.accept(this, data)
+            IrTypeOperator.CAST -> LuauCastExpr(expression.argument.accept(this, data) as LuauExpr, LuauTypeSolver.fromIr(expression.typeOperand))
+            else -> error("Unhandled type operator: ${expression.operator}")
+        }
     }
 
     override fun visitFunction(declaration: IrFunction, data: Nothing?): LuauFunctionStmt {
@@ -288,7 +322,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
     }
 
     override fun visitReturn(expression: IrReturn, data: Nothing?): LuauReturn {
-        val args = expression.value.accept(this, data) as LuauExpr
+        val args = expression.value.accept(this, data) as LuauReturnable
         return LuauReturn(listOf(args))
     }
 
@@ -301,11 +335,27 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         return LuauWhileLoop(condition, body)
     }
 
-    override fun visitBlock(expression: IrBlock, data: Nothing?): LuauStmt {
-        if (expression.origin == IrStatementOrigin.FOR_LOOP) {
-            return visitForLoop(expression, data)
+    override fun visitBlock(expression: IrBlock, data: Nothing?): LuauNode {
+        return when (expression.origin) {
+            IrStatementOrigin.FOR_LOOP -> visitForLoop(expression, data)
+            IrStatementOrigin.POSTFIX_INCR -> {
+                val lhs = (expression.statements[1] as IrSetValue)
+                val type = (expression.statements[2] as IrGetValue).type
+                if (type.isNumericalType())
+                    LuauBinaryExpr(LuauIdentifier(lhs.symbol.owner.name.asString()), "+=", LuauNumberLiteral(1))
+                else
+                    LuauNamecall(lhs.symbol.owner.name.asString(), "inc", emptyList())
+            }
+            IrStatementOrigin.POSTFIX_DECR -> {
+                val lhs = (expression.statements[1] as IrSetValue)
+                val type = (expression.statements[2] as IrGetValue).type
+                if (type.isNumericalType())
+                    LuauBinaryExpr(LuauIdentifier(lhs.symbol.owner.name.asString()), "-=", LuauNumberLiteral(1))
+                else
+                    LuauNamecall(lhs.symbol.owner.name.asString(), "dec", emptyList())
+            }
+            else -> LuauBlock(expression.statements.map { lowerToStmt(it.accept(this, data)) })
         }
-        return LuauBlock(expression.statements.map { lowerToStmt(it.accept(this, data)) })
     }
 
     fun visitForLoop(expression: IrBlock, data: Nothing?): LuauForLoop {

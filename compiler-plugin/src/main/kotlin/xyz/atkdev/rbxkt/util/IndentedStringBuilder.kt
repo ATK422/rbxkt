@@ -1,8 +1,7 @@
 package xyz.atkdev.rbxkt.util
 
-class IndentedStringBuilder {
+class IndentedStringBuilder(var level: Int = 0) {
     private val builder = StringBuilder()
-    private var level = 0
 
     val indentString get() = "    ".repeat(level)
 
@@ -14,6 +13,8 @@ class IndentedStringBuilder {
 
     fun line(text: String) = text.split("\n").forEach { append("$indentString$it\n") }
     fun append(text: String): StringBuilder = builder.append(text)
+
+    fun removeLine() = builder.deleteAt(builder.lastIndexOf('\n'))
 
     override fun toString() = builder.toString()
 }

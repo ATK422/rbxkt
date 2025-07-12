@@ -2,15 +2,21 @@ package xyz.atkdev.rbxkt.luau
 
 import org.jetbrains.kotlin.utils.mapToSetOrEmpty
 import xyz.atkdev.rbxkt.util.IndentedStringBuilder
+import xyz.atkdev.rbxkt.util.parenthesize
 
 sealed interface LuauNode {
     fun display(builder: IndentedStringBuilder)
 }
-sealed interface LuauExpr : LuauNode {
+sealed interface LuauExpr : LuauNode, LuauReturnable {
     fun render(): String
+    override fun render(asExpr: Boolean, level: Int) = render()
 }
 sealed interface LuauStmt : LuauNode {
     fun render(builder: IndentedStringBuilder)
+}
+
+sealed interface LuauReturnable : LuauNode {
+    fun render(asExpr: Boolean, level: Int): String
 }
 
 object LuauNoOp : LuauExpr {
@@ -123,7 +129,7 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
     }
 }
 
-data class LuauUnaryOp(val operator: String, val operand: LuauIdentifier) : LuauExpr {
+data class LuauUnaryOp(val operator: String, val operand: LuauExpr) : LuauExpr {
     override fun render() = "$operator${operand.render()}"
     override fun display(builder: IndentedStringBuilder) { builder.line("LuauUnaryOp operator=$operator operand=${operand.display(builder)}") }
 }
@@ -168,8 +174,8 @@ data class LuauComment(val comment: String, val multiline: Boolean) : LuauExpr {
     override fun display(builder: IndentedStringBuilder) { builder.line("LuauComment comment=$comment multiline=$multiline") }
 }
 
-data class LuauBinaryExpr(val left: LuauExpr, val op: String, val right: LuauExpr) : LuauExpr {
-    override fun render() = "${left.render()} $op ${right.render()}"
+data class LuauBinaryExpr(val left: LuauExpr, val op: String, val right: LuauExpr, val isComparison: Boolean = false) : LuauExpr {
+    override fun render() = "${left.render()} $op ${right.render()}".parenthesize(isComparison)
     override fun display(builder: IndentedStringBuilder) {
         builder.line("LuauBinaryExpr")
         builder.indent {
@@ -225,6 +231,14 @@ data class LuauLambdaExpr(val params: List<LuauParameter>, val body: List<LuauSt
             builder.line("Body")
             builder.indent { body.forEach { it.display(builder) } }
         }
+    }
+}
+
+
+data class LuauCastExpr(val expr: LuauExpr, val type: String) : LuauExpr {
+    override fun render() = "(${expr.render()} :: $type)"
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("LuauCastExpression expr=${expr.display(builder)} type=$type")
     }
 }
 
@@ -341,9 +355,9 @@ data class LuauAssign(val target: String, val value: LuauExpr) : LuauStmt {
     }
 }
 
-data class LuauReturn(val args: List<LuauExpr>) : LuauStmt {
+data class LuauReturn(val args: List<LuauReturnable>) : LuauStmt {
     override fun render(builder: IndentedStringBuilder) {
-        builder.line("return ${args.joinToString(", ") { it.render() }}")
+        builder.line("return ${args.joinToString(", ") { it.render(true, builder.level).replaceFirst(builder.indentString, "") }}")
     }
 
     override fun display(builder: IndentedStringBuilder) {
@@ -415,11 +429,17 @@ data class LuauWhileLoop(val condition: LuauExpr, val body: List<LuauStmt>) : Lu
     }
 }
 
-data class LuauWhen(val branches: List<LuauBranch>) : LuauStmt {
+data class LuauWhen(val branches: List<LuauBranch>) : LuauStmt, LuauReturnable {
     override fun render(builder: IndentedStringBuilder) {
+        builder.line(render(false, builder.level))
+    }
+
+    override fun render(asExpr: Boolean, level: Int): String {
+        val builder = IndentedStringBuilder(level)
+        val elseIfWord = if (asExpr) "else if" else "elseif"
         branches.forEachIndexed { index, branch ->
             val keyword = when(branch) {
-                is LuauBranch.Conditional -> if (index == 0) "if" else "elseif"
+                is LuauBranch.Conditional -> if (index == 0) "if" else elseIfWord
                 is LuauBranch.Else -> "else"
             }
 
@@ -441,14 +461,19 @@ data class LuauWhen(val branches: List<LuauBranch>) : LuauStmt {
             }
         }
 
-        builder.line("end")
+        if (!asExpr) builder.line("end")
+
+        return builder.toString()
     }
 
     override fun display(builder: IndentedStringBuilder) {
         builder.line("When")
-        builder.line("Branches")
         builder.indent {
-            branches.forEach { it.display(builder) }
+            builder.line("Branches")
+            builder.indent {
+                branches.forEach { it.display(builder) }
+            }
         }
     }
 }
+

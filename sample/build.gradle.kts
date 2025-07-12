@@ -19,6 +19,10 @@ rbxkt {
     outputDir.set("${project.layout.buildDirectory.get().asFile.absolutePath}/out")
 }
 
+dependencies {
+
+}
+
 tasks.withType<KotlinCompile>().configureEach {
     outputs.upToDateWhen { false }
 }
