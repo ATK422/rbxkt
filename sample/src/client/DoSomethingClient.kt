@@ -17,6 +17,7 @@ fun fizzBuzz(n: Int): String {
 }
 
 fun main() {
+    val a = arrayOf("30", "20", "5")
     for (i in 1..100) {
         println(fizzBuzz(i))
     }

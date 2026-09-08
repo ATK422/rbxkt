@@ -13,6 +13,32 @@ import org.jetbrains.kotlin.ir.types.isInt
 import org.jetbrains.kotlin.ir.types.isLong
 import org.jetbrains.kotlin.ir.types.isNumber
 import org.jetbrains.kotlin.ir.types.isShort
+import org.jetbrains.kotlin.ir.util.fqNameWhenAvailable
+
+private val kotlinArrayFactories = setOf(
+    "kotlin.arrayOf",
+    "kotlin.emptyArray",
+    "kotlin.booleanArrayOf",
+    "kotlin.byteArrayOf",
+    "kotlin.charArrayOf",
+    "kotlin.shortArrayOf",
+    "kotlin.intArrayOf",
+    "kotlin.longArrayOf",
+    "kotlin.floatArrayOf",
+    "kotlin.doubleArrayOf",
+)
+
+fun IrSimpleFunction.isKotlinArrayFactory(): Boolean =
+    fqNameWhenAvailable?.asString() in kotlinArrayFactories
+
+private val kotlinListFactories = setOf(
+    "kotlin.collections.listOf",
+    "kotlin.collections.emptyList",
+    "kotlin.collections.mutableListOf",
+)
+
+fun IrSimpleFunction.isKotlinListFactory(): Boolean =
+    fqNameWhenAvailable?.asString() in kotlinListFactories
 
 fun getConstructorName(constructor: IrConstructor): String {
     return if (constructor.isPrimary) {

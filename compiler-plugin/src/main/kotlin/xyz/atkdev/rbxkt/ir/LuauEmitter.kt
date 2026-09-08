@@ -44,6 +44,14 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         error("Unhandled element: ${element::class.simpleName}")
     }
 
+    override fun visitVararg(expression: IrVararg, data: Nothing?): LuauExpr {
+        val elements = expression.elements.map {
+            require(it !is IrSpreadElement) { "Spread elements in collection construction are not supported yet" }
+            it.accept(this, data) as LuauExpr
+        }
+        return LuauArrayLiteral(elements)
+    }
+
     override fun visitCall(expression: IrCall, data: Nothing?): LuauNode {
         // TODO: implement overloading
         val receiver = expression.dispatchReceiver
@@ -54,9 +62,16 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
 
+        if (owner.isKotlinArrayFactory() || owner.isKotlinListFactory()) {
+            return if (owner.parameters.any { it.varargElementType != null } && args.isNotEmpty()) {
+                args.single()
+            } else {
+                LuauArrayLiteral(args)
+            }
+        }
+
         val isSetterGetter = owner.correspondingPropertySymbol != null
         val isSuperCall = expression.superQualifierSymbol != null
-
         if (name == "toString")
             return LuauCall("tostring", listOf(args.first()))
         else if (isSuperCall) {
@@ -290,6 +305,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr = when(val value = expression.value) {
         is String -> LuauStringLiteral(value)
+        is Char -> LuauStringLiteral(value.toString())
         is Number -> LuauNumberLiteral(value)
         is Boolean -> LuauBoolLiteral(value)
         else -> error("Unsupported constant type: ${value?.let { it::class.simpleName }}")

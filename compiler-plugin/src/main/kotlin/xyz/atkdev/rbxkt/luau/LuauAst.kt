@@ -186,6 +186,14 @@ data class LuauBinaryExpr(val left: LuauExpr, val op: String, val right: LuauExp
     }
 }
 
+data class LuauArrayLiteral(val elements: List<LuauExpr>) : LuauExpr {
+    override fun render() = "{${elements.joinToString(", ") { it.render() }}}"
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("LuauArrayLiteral")
+        builder.indent { elements.forEach { it.display(builder) } }
+    }
+}
+
 data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
     override fun render() = "$name(${args.joinToString(", ") { it.render() }})"
     override fun display(builder: IndentedStringBuilder) {
@@ -476,4 +484,3 @@ data class LuauWhen(val branches: List<LuauBranch>) : LuauStmt, LuauReturnable {
         }
     }
 }
-
