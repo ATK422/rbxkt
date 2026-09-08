@@ -139,6 +139,11 @@ data class LuauIdentifier(val name: String) : LuauExpr {
     override fun display(builder: IndentedStringBuilder) { builder.line("LuauIdentifier name=$name") }
 }
 
+object LuauNilLiteral : LuauExpr {
+    override fun render() = "nil"
+    override fun display(builder: IndentedStringBuilder) { builder.line("LuauNilLiteral") }
+}
+
 data class LuauBoolLiteral(val value: Boolean) : LuauExpr {
     override fun render() = value.toString()
     override fun display(builder: IndentedStringBuilder) { builder.line("LuauBoolLiteral value=$value") }

@@ -40,10 +40,22 @@ object LuauTypeSolver {
     }
 
     fun fromIr(ir: IrType): String {
+        if (ir.isMarkedNullable()) {
+            if (ir.classFqName?.asString() == "kotlin.Nothing") return "nil"
+            val nonNullable = ir.makeNotNull()
+            val type = fromIr(nonNullable)
+            return when {
+                type == "any" || type == "nil" -> type
+                nonNullable.isFunction() -> "($type)?"
+                else -> "$type?"
+            }
+        }
+
         val result =
             if (ir.run { isByte() || isShort() || isInt() || isLong() || isFloat() || isDouble() }) "number"
             else if (ir.isBoolean()) "boolean"
             else if (ir.isString() || ir.isChar()) "string"
+            else if (ir.isAny()) "any"
             else if (ir.isArray() || ir.isPrimitiveArray()) "{ [number]: ${fromIr(ir.getArrayElementType(pluginContext.irBuiltIns))} }"
             else if (ir is IrSimpleType && ir.classFqName?.asString() in setOf("kotlin.collections.List", "kotlin.collections.MutableList")) {
                 val elementType = ir.arguments.singleOrNull()?.typeOrNull?.let { fromIr(it) } ?: "any"
@@ -57,6 +69,6 @@ object LuauTypeSolver {
             }
             else "any"
 
-        return result + ir.isMarkedNullable().let { if (it) "?" else "" }
+        return result
     }
 }

@@ -142,7 +142,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
             }
         } else if (name == "not" && expression.origin == IrStatementOrigin.EXCLEQ) {
             val args = (expression.arguments[0] as IrCall).arguments.map { it?.accept(this, data) as LuauExpr }
-            return LuauBinaryExpr(args[0], "!=", args[1], true)
+            return LuauBinaryExpr(args[0], "~=", args[1], true)
         } else if (expression.dispatchReceiver != null) {
             val symbol = expression.dispatchReceiver?.javaClass
                 ?.methods?.firstOrNull { it.name == "getSymbol" }
@@ -304,6 +304,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
     }
 
     override fun visitConst(expression: IrConst, data: Nothing?): LuauExpr = when(val value = expression.value) {
+        null -> LuauNilLiteral
         is String -> LuauStringLiteral(value)
         is Char -> LuauStringLiteral(value.toString())
         is Number -> LuauNumberLiteral(value)
