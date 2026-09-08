@@ -9,7 +9,6 @@ import org.jetbrains.kotlin.ir.types.*
 import org.jetbrains.kotlin.ir.util.getArrayElementType
 import org.jetbrains.kotlin.ir.util.isPrimitiveArray
 import org.jetbrains.kotlin.ir.util.isFunction
-import org.jetbrains.kotlin.ir.util.render
 
 object LuauTypeSolver {
     var irContext: IrPluginContext? = null
@@ -52,10 +51,11 @@ object LuauTypeSolver {
         }
 
         val result =
-            if (ir.run { isByte() || isShort() || isInt() || isLong() || isFloat() || isDouble() }) "number"
+            if (ir.run { isByte() || isShort() || isInt() || isLong() || isFloat() || isDouble() || isNumber() }) "number"
             else if (ir.isBoolean()) "boolean"
             else if (ir.isString() || ir.isChar()) "string"
             else if (ir.isAny()) "any"
+            else if (ir.isNothing()) "never"
             else if (ir.isArray() || ir.isPrimitiveArray()) "{ [number]: ${fromIr(ir.getArrayElementType(pluginContext.irBuiltIns))} }"
             else if (ir is IrSimpleType && ir.classFqName?.asString() in setOf("kotlin.collections.List", "kotlin.collections.MutableList")) {
                 val elementType = ir.arguments.singleOrNull()?.typeOrNull?.let { fromIr(it) } ?: "any"
@@ -63,7 +63,13 @@ object LuauTypeSolver {
             }
             else if (ir.isFunction()) fromFunction(ir)
             else if (ir is IrSimpleType) when (val owner = ir.classifier.owner) {
-                is IrClass -> fromName(owner.name)
+                is IrClass -> {
+                    val name = fromName(owner.name)
+                    if (ir.arguments.isEmpty()) name
+                    else ir.arguments.joinToString(", ", "$name<", ">") {
+                        it.typeOrNull?.let { type -> fromIr(type) } ?: "any"
+                    }
+                }
                 is IrTypeParameter -> fromName(owner.name)
                 else -> "any"
             }

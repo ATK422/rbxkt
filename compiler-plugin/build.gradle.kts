@@ -17,14 +17,29 @@ kotlin {
 
 sourceSets {
     main {
-        java.setSrcDirs(listOf("src"))
+        java.setSrcDirs(listOf("src/main/kotlin"))
         resources.setSrcDirs(listOf("resources"))
     }
 }
 
 dependencies {
     compileOnly(kotlin("compiler"))
+    testImplementation(kotlin("compiler"))
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.5.1")
+}
+
+val typeRenderingGoldenTest by tasks.registering(JavaExec::class) {
+    group = "verification"
+    description = "Checks Luau type rendering against Kotlin IR golden fixtures."
+    dependsOn(tasks.named("testClasses"))
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("xyz.atkdev.rbxkt.luau.TypeRenderingGoldenTestKt")
+    args(layout.projectDirectory.dir("src/test/resources/type-rendering").asFile.absolutePath)
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}
+
+tasks.named("test") {
+    dependsOn(typeRenderingGoldenTest)
 }
 
 buildConfig {
