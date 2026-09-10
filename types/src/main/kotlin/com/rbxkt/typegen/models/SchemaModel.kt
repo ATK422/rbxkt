@@ -13,7 +13,7 @@ internal data class SchemaModel(
         val enum: List<String>? = null,
         val items: SchemaDefinition? = null,
     )
-    
+
     fun annotationNames(): Set<String> {
         fun definition(vararg names: String): SchemaDefinition =
             definitions.values.firstOrNull { it.id in names }

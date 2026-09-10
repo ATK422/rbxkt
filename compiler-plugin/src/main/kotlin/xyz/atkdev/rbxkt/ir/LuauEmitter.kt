@@ -70,6 +70,15 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
             }
         }
 
+        //Handle unary operations
+        if (name == "unaryMinus") {
+            return LuauUnaryOp("-", args.first())
+        } else if (name == "unaryPlus") {
+            return args.first()
+        } else if (name == "not" && expression.origin != IrStatementOrigin.EXCLEQ) {
+            return LuauNot(args.first())
+        }
+
         val isSetterGetter = owner.correspondingPropertySymbol != null
         val isSuperCall = expression.superQualifierSymbol != null
         if (name == "toString")
@@ -128,6 +137,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 IrStatementOrigin.OROR -> "or"
 
                 //Custom Handled Expressions
+                //TODO: Handle these properly without dropping them
                 IrStatementOrigin.RANGE -> null
                 IrStatementOrigin.RANGE_UNTIL -> null
                 IrStatementOrigin.IN -> null

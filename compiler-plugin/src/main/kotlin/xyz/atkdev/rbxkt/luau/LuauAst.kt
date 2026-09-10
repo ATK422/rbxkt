@@ -48,7 +48,7 @@ data class LuauExprStmt(val expr: LuauExpr) : LuauStmt {
     }
 }
 
-sealed class LuauBranch() : LuauNode {
+sealed class LuauBranch : LuauNode {
     data class Conditional(val condition: LuauExpr, val result: List<LuauStmt>) : LuauBranch() {
         override fun display(builder: IndentedStringBuilder) {
             builder.line("LuauBranch.Conditional condition=${condition.display(builder)}")
@@ -130,8 +130,14 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
 }
 
 data class LuauUnaryOp(val operator: String, val operand: LuauExpr) : LuauExpr {
-    override fun render() = "$operator${operand.render()}"
+    // Preserve operand grouping and keep nested minus from becoming a Lua comment.
+    override fun render() = "$operator(${operand.render()})"
     override fun display(builder: IndentedStringBuilder) { builder.line("LuauUnaryOp operator=$operator operand=${operand.display(builder)}") }
+}
+
+data class LuauNot(val operand: LuauExpr) : LuauExpr {
+    override fun render() = "not (${operand.render()})"
+    override fun display(builder: IndentedStringBuilder) { builder.line("LuauNot operand=$operand") }
 }
 
 data class LuauIdentifier(val name: String) : LuauExpr {
@@ -180,7 +186,11 @@ data class LuauComment(val comment: String, val multiline: Boolean) : LuauExpr {
 }
 
 data class LuauBinaryExpr(val left: LuauExpr, val op: String, val right: LuauExpr, val isComparison: Boolean = false) : LuauExpr {
-    override fun render() = "${left.render()} $op ${right.render()}".parenthesize(isComparison)
+    override fun render(): String {
+        // Kotlin IR carries grouping in the expression tree, not explicit parentheses.
+        fun LuauExpr.renderOperand() = render().parenthesize(this is LuauBinaryExpr && !isComparison)
+        return "${left.renderOperand()} $op ${right.renderOperand()}".parenthesize(isComparison)
+    }
     override fun display(builder: IndentedStringBuilder) {
         builder.line("LuauBinaryExpr")
         builder.indent {

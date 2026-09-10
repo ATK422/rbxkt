@@ -24,11 +24,11 @@ fun main() {
     val a = arrayOf("30", "20", "5")
     val b: String? = null
     for (i in 1..100) {
-        println(fizzBuzz(i))
+//        println(fizzBuzz(i))
     }
 
     val cd = 10
-    val c = -cd
+    val c = -(cd + 100 + -cd)
 
     val p = Part {
         name = "FizzBuzz"
