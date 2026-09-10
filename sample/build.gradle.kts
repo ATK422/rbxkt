@@ -6,11 +6,6 @@ plugins {
     `java-library`
 }
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
 kotlin {
     jvmToolchain(21)
 }
@@ -20,18 +15,10 @@ rbxkt {
 }
 
 dependencies {
-
 }
 
 tasks.withType<KotlinCompile>().configureEach {
     outputs.upToDateWhen { false }
-}
-
-subprojects {
-    repositories {
-        mavenLocal()
-        mavenCentral()
-    }
 }
 
 java {

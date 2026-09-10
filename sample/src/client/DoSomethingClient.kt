@@ -1,5 +1,7 @@
 package xyz.atkdev.rbxkt
 
+import com.rbxkt.types.classes.Part
+
 fun fizzBuzz(n: Int): () -> String {
     var a = 1
     a++
@@ -23,5 +25,12 @@ fun main() {
     val b: String? = null
     for (i in 1..100) {
         println(fizzBuzz(i))
+    }
+
+    val cd = 10
+    val c = -cd
+
+    val p = Part {
+        name = "FizzBuzz"
     }
 }

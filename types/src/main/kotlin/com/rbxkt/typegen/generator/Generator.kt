@@ -42,7 +42,7 @@ internal data class CorrectionData(
     )
 }
 
-internal class RobloxTypeGenerator() {
+internal class RobloxTypeGenerator(private val githubApi: GithubApi) {
     companion object {
         internal const val CORRECTIONS_RAW_GITHUB_URL =
             "https://raw.githubusercontent.com/JohnnyMorganz/luau-lsp/refs/heads/main/scripts/Corrections.json"
@@ -56,7 +56,7 @@ internal class RobloxTypeGenerator() {
     internal lateinit var classes: Map<String, ClassName>
 
     @OptIn(ExperimentalCoroutinesApi::class)
-    internal suspend fun generate() {
+    internal suspend fun generate(generatedDir: File = File(System.getProperty("user.dir"), "src/generated")) {
         val corrections = getCorrections()
 
         val suppressAnnotation = AnnotationSpec.builder(Suppress::class)
@@ -75,15 +75,16 @@ internal class RobloxTypeGenerator() {
             FileSpec.builder("$PACKAGE_NAME.classes", "RobloxClasses").addAnnotation(suppressAnnotation)
 
         val (enumModels, dataTypeModels, classModels) = coroutineScope {
-            val enums = async { GithubApi.getYamlFiles<EnumModel>("enums") }
-            val datatypes = async { GithubApi.getYamlFiles<DatatypeModel>("datatypes") }
-            val classes = async { GithubApi.getYamlFiles<ClassModel>("classes") }
+            val enums = async { githubApi.getYamlFiles<EnumModel>("enums") }
+            val datatypes = async { githubApi.getYamlFiles<DatatypeModel>("datatypes") }
+            val classes = async { githubApi.getYamlFiles<ClassModel>("classes") }
 
             awaitAll(enums, datatypes, classes)
 
             Triple(enums.getCompleted(), datatypes.getCompleted(), classes.getCompleted())
         }
 
+        logger.log(System.Logger.Level.INFO, "Loaded ${enumModels.size} enums, ${dataTypeModels.size} datatypes, and ${classModels.size} classes")
 
         enums = enumModels.keys.associateWith { ClassName("$PACKAGE_NAME.enums", it) }
         datatypes = dataTypeModels.keys.associateWith { ClassName("$PACKAGE_NAME.datatypes", it) }
@@ -97,7 +98,6 @@ internal class RobloxTypeGenerator() {
             launch { generateClasses(classModels, classModelSpec) }
         }
         
-        val generatedDir = File(System.getProperty("user.dir") + "/src/generated/")
         generatedDir.deleteRecursively()
         generatedDir.mkdirs()
 
@@ -108,7 +108,7 @@ internal class RobloxTypeGenerator() {
     }
 
     private suspend fun getCorrections(): Map<String, Map<String, CorrectionData>> {
-        val corrections = GithubApi.getJsonFile<CorrectionsModel>(CORRECTIONS_RAW_GITHUB_URL, false)
+        val corrections = githubApi.getJsonFile<CorrectionsModel>(CORRECTIONS_RAW_GITHUB_URL, false)
         return corrections.classes.associate { correction ->
             correction.name to correction.members.associate { member ->
                 member.name to CorrectionData(
@@ -119,7 +119,7 @@ internal class RobloxTypeGenerator() {
                         )
                     },
                     member.valueType?.name,
-                    if (member.returnType != null)
+                    if (member.returnType != null && (member.returnType.name != null || member.returnType.generic != null))
                         listOf(member.returnType.name ?: member.returnType.generic!!)
                     else
                         member.tupleReturn?.map { it.name!! }
@@ -129,11 +129,8 @@ internal class RobloxTypeGenerator() {
     }
 
     private suspend fun generateAnnotations(fileSpec: FileSpec.Builder): Map<String, AnnotationSpec> {
-        val schema = GithubApi.getJsonFile<SchemaModel>("tools/schemas/engine/classes.json")
-        val combinedNames =
-            (schema.definitions.tags.items.enum + schema.definitions.threadSafety.enum + schema.definitions.securityTags.enum)
-                .filterNot { it == "Deprecated" }
-                .toMutableSet()
+        val schema = githubApi.getJsonFile<SchemaModel>("tools/schemas/engine/classes.json")
+        val combinedNames = schema.annotationNames()
 
         val nativeAnnotation = TypeSpec.annotationBuilder("Native")
             .addAnnotation(
@@ -581,6 +578,10 @@ internal class RobloxTypeGenerator() {
             .addDeprecation(method.deprecationMessage)
             .addTags(method.tags)
 
+        if (methodName.toCamelCase() == "toString" && method.parameters.orEmpty().isEmpty()) {
+            funcBuilder.addModifiers(KModifier.OVERRIDE)
+        }
+
         if (methodName != methodName.toCamelCase()) {
             funcBuilder.addLuauName(methodName)
         }
@@ -615,6 +616,15 @@ internal class RobloxTypeGenerator() {
         if (cleanName.isEmpty()) cleanName = "a0"
         val type = typeOf(parameter.type, parameter.default == "nil" || parameter.default == "{}")
         val builder = ParameterSpec.builder(cleanName.toCamelCase(), type)
+        val default = parameter.default
+        if (default?.startsWith("Enum.") == true && default.removePrefix("Enum.").substringBefore('.') !in enums) {
+            // Upstream can retain defaults for enums it no longer documents.
+            // Keep the optional argument and original value in this compile-time stub.
+            return builder.defaultValue("TODO(%S)", "Roblox default: $default").build()
+        }
+        if (type == datatypes["User"] && default?.startsWith("U1.") == true) {
+            return builder.defaultValue("%T.fromString(%S)", type, default).build()
+        }
         if ((parameter.default != null && parameter.default.isNotEmpty()) || parameter.type.contains("?")) {
             var cleanDefault = (parameter.default?.takeIf { it.isNotEmpty() } ?: "null")
                 .replace("{}", "null")
@@ -666,6 +676,7 @@ internal class RobloxTypeGenerator() {
             "number", "int64", "int", "float", "double" -> Number::class.asClassName()
             "string", "ContentId", "AdReward" -> String::class.asClassName()
             "Array" -> Array::class.asClassName()
+            "List" -> List::class.asClassName()
             "bool", "boolean" -> Boolean::class.asClassName()
             "table" -> Map::class.asClassName()
             "Dictionary" -> Map::class.asClassName()
@@ -673,14 +684,14 @@ internal class RobloxTypeGenerator() {
             else -> enums[cleanName] ?: classes[cleanName] ?: datatypes[cleanName] ?: Any::class.asClassName()
         }
 
-        if (cleanName == "Array" && !containsGenerics || cleanName == "function" || cleanName == "Function") typeName =
+        if (cleanName in setOf("Array", "List") && !containsGenerics || cleanName == "function" || cleanName == "Function") typeName =
             (typeName as ClassName).parameterizedBy(STAR)
         else if (cleanName == "table" || cleanName == "Dictionary") typeName =
             (typeName as ClassName).parameterizedBy(STAR, STAR)
         else if (cleanName == "Tuple" && containsGenerics) typeName =
             typeOf(type.substringAfter("<").substringBeforeLast(">"))
         else {
-            if (containsGenerics) {
+            if (containsGenerics && cleanName in setOf("Array", "List")) {
                 val generics = type.substringAfter("<").substringBeforeLast(">").split(",")
                 typeName = (typeName as ClassName).parameterizedBy(generics.map { typeOf(it) })
             }

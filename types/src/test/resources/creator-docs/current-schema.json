@@ -1,0 +1,482 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema",
+  "type": "object",
+  "properties": {
+    "name": {
+      "type": "string"
+    },
+    "type": {
+      "type": "string",
+      "enum": [
+        "class"
+      ]
+    },
+    "memory_category": {
+      "type": "string"
+    },
+    "summary": {
+      "type": "string"
+    },
+    "code_samples": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "inherits": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "descendants": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "tags": {
+      "$ref": "#/definitions/__schema0"
+    },
+    "deprecation_message": {
+      "type": "string"
+    },
+    "properties": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "code_samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "type": {
+            "type": "string"
+          },
+          "tags": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "deprecation_message": {
+            "type": "string"
+          },
+          "security": {
+            "type": "object",
+            "properties": {
+              "read": {
+                "$ref": "#/definitions/__schema1"
+              },
+              "write": {
+                "$ref": "#/definitions/__schema1"
+              }
+            },
+            "required": [
+              "read",
+              "write"
+            ],
+            "additionalProperties": false
+          },
+          "thread_safety": {
+            "$ref": "#/definitions/__schema2"
+          },
+          "category": {
+            "type": "string"
+          },
+          "serialization": {
+            "type": "object",
+            "properties": {
+              "can_load": {
+                "type": "boolean"
+              },
+              "can_save": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "can_load",
+              "can_save"
+            ],
+            "additionalProperties": false
+          },
+          "capabilities": {
+            "$ref": "#/definitions/__schema3"
+          },
+          "simulationAccess": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "description",
+          "code_samples",
+          "type",
+          "tags",
+          "deprecation_message",
+          "security",
+          "thread_safety",
+          "category",
+          "serialization",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "methods": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "code_samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parameters": {
+            "$ref": "#/definitions/__schema4"
+          },
+          "returns": {
+            "$ref": "#/definitions/__schema5"
+          },
+          "tags": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "deprecation_message": {
+            "type": "string"
+          },
+          "security": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "thread_safety": {
+            "$ref": "#/definitions/__schema2"
+          },
+          "capabilities": {
+            "$ref": "#/definitions/__schema3"
+          },
+          "simulationAccess": {
+            "type": "boolean"
+          },
+          "open_cloud_equivalents": {
+            "$id": "open_cloud_equivalents",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "path": {
+                  "type": "string"
+                },
+                "relationship": {
+                  "type": "string",
+                  "enum": [
+                    "equivalent_full",
+                    "equivalent_partial",
+                    "related"
+                  ]
+                },
+                "note": {
+                  "anyOf": [
+                    {
+                      "type": "string"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                }
+              },
+              "required": [
+                "path",
+                "relationship",
+                "note"
+              ],
+              "additionalProperties": false
+            }
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "description",
+          "code_samples",
+          "parameters",
+          "returns",
+          "tags",
+          "deprecation_message",
+          "security",
+          "thread_safety",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "events": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "code_samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parameters": {
+            "$ref": "#/definitions/__schema4"
+          },
+          "tags": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "deprecation_message": {
+            "type": "string"
+          },
+          "security": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "capabilities": {
+            "$ref": "#/definitions/__schema3"
+          },
+          "simulationAccess": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "description",
+          "code_samples",
+          "parameters",
+          "tags",
+          "deprecation_message",
+          "security",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "callbacks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "code_samples": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "parameters": {
+            "$ref": "#/definitions/__schema4"
+          },
+          "returns": {
+            "$ref": "#/definitions/__schema5"
+          },
+          "tags": {
+            "$ref": "#/definitions/__schema0"
+          },
+          "deprecation_message": {
+            "type": "string"
+          },
+          "security": {
+            "$ref": "#/definitions/__schema1"
+          },
+          "thread_safety": {
+            "$ref": "#/definitions/__schema2"
+          },
+          "capabilities": {
+            "$ref": "#/definitions/__schema3"
+          },
+          "writeCapabilities": {
+            "$id": "writeCapabilities",
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "simulationAccess": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "summary",
+          "description",
+          "code_samples",
+          "parameters",
+          "returns",
+          "tags",
+          "deprecation_message",
+          "security",
+          "thread_safety",
+          "capabilities"
+        ],
+        "additionalProperties": false
+      }
+    }
+  },
+  "required": [
+    "name",
+    "type",
+    "memory_category",
+    "summary",
+    "description",
+    "code_samples",
+    "inherits",
+    "descendants",
+    "tags",
+    "deprecation_message",
+    "properties",
+    "methods",
+    "events",
+    "callbacks"
+  ],
+  "additionalProperties": false,
+  "definitions": {
+    "__schema0": {
+      "$id": "tags",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "NotCreatable",
+          "NotBrowsable",
+          "ReadOnly",
+          "NotReplicated",
+          "Hidden",
+          "Deprecated",
+          "CustomLuaState",
+          "CanYield",
+          "Service",
+          "Yields",
+          "PlayerReplicated",
+          "NotScriptable",
+          "Settings",
+          "NoYield",
+          "UserSettings"
+        ]
+      }
+    },
+    "__schema1": {
+      "$id": "security_tag",
+      "type": "string",
+      "enum": [
+        "None",
+        "Plugin",
+        "PluginSecurity",
+        "LocalUser",
+        "LocalUserSecurity",
+        "RobloxScript",
+        "RobloxScriptSecurity",
+        "RobloxEngine",
+        "RobloxEngineSecurity",
+        "NotAccessible",
+        "NotAccessibleSecurity",
+        "WritePlayer",
+        "WritePlayerSecurity"
+      ]
+    },
+    "__schema2": {
+      "$id": "thread_safety",
+      "type": "string",
+      "enum": [
+        "Unsafe",
+        "ReadSafe",
+        "Safe",
+        "ReadOnly"
+      ]
+    },
+    "__schema3": {
+      "$id": "capabilities",
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "__schema4": {
+      "$id": "parameters",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string"
+          },
+          "default": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "type",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "__schema5": {
+      "$id": "returns",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "summary"
+        ],
+        "additionalProperties": false
+      }
+    }
+  }
+}

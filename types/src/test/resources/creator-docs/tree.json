@@ -1,0 +1,11 @@
+{
+  "sha": "example-directory-sha",
+  "url": "https://api.github.com/repos/Roblox/creator-docs/git/trees/example-directory-sha",
+  "tree": [
+    {"path": "Second.yml", "type": "blob", "mode": "100644", "sha": "second"},
+    {"path": "README.md", "type": "blob", "mode": "100644", "sha": "readme"},
+    {"path": "nested.yaml", "type": "tree", "mode": "040000", "sha": "directory"},
+    {"path": "First.yaml", "type": "blob", "mode": "100644", "sha": "first"}
+  ],
+  "truncated": false
+}

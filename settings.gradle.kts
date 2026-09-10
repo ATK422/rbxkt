@@ -22,4 +22,3 @@ dependencyResolutionManagement {
 include("compiler-plugin")
 include("gradle-plugin")
 include("types")
-include("sample")

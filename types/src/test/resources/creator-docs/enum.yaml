@@ -1,0 +1,12 @@
+name: First
+type: enum
+summary: ''
+description: ''
+tags: []
+deprecation_message: ''
+items:
+  - name: Value
+    summary: ''
+    value: 0
+    tags: []
+    deprecation_message: ''

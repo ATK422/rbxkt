@@ -6,7 +6,7 @@ plugins {
 
 allprojects {
     group = "com.rbxkt"
-    version = "1.0.0"
+    version = providers.gradleProperty("rbxktVersion").orElse("1.0.0").get()
 }
 
 tasks.register("buildAll") {

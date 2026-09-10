@@ -1,0 +1,54 @@
+{
+  "definitions": {
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "NotCreatable",
+          "NotBrowsable",
+          "ReadOnly",
+          "NotReplicated",
+          "Hidden",
+          "Deprecated",
+          "CustomLuaState",
+          "CanYield",
+          "Service",
+          "Yields",
+          "PlayerReplicated",
+          "NotScriptable",
+          "Settings",
+          "NoYield",
+          "UserSettings"
+        ]
+      }
+    },
+    "security_tags": {
+      "type": "string",
+      "enum": [
+        "None",
+        "Plugin",
+        "PluginSecurity",
+        "LocalUser",
+        "LocalUserSecurity",
+        "RobloxScript",
+        "RobloxScriptSecurity",
+        "RobloxEngine",
+        "RobloxEngineSecurity",
+        "NotAccessible",
+        "NotAccessibleSecurity",
+        "WritePlayer",
+        "WritePlayerSecurity"
+      ]
+    },
+    "thread_safety": {
+      "type": "string",
+      "enum": [
+        "Unsafe",
+        "ReadSafe",
+        "Safe",
+        "ReadOnly"
+      ]
+    }
+  }
+}
