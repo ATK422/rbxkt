@@ -43,9 +43,19 @@ class RbxKtGradlePlugin : KotlinCompilerPluginSupportPlugin {
         return project.provider {
             val extension = project.extensions.getByType(RbxKtGradleExtension::class.java)
             val outputDir = extension.outputDir.orNull ?: "${project.layout.buildDirectory.get().asFile.absolutePath}/out"
+            val kinds = extension.moduleKinds.get()
+            require(kinds.values.all { it in setOf("client", "server", "shared") }) {
+                "rbxkt.moduleKinds values must be client, server, or shared"
+            }
+            require(kinds.values.distinct().size == kinds.size) {
+                "Only one compilation may own each rbxkt module kind"
+            }
             listOf(
-                SubpluginOption("outputDir", outputDir)
-            )
+                SubpluginOption("outputDir", outputDir),
+                SubpluginOption("moduleKind", kinds[kotlinCompilation.name] ?: "unconfigured")
+            ) + kotlinCompilation.allKotlinSourceSets.flatMap { it.kotlin.srcDirs }.distinct().map {
+                SubpluginOption("sourceRoot", it.absolutePath)
+            }
         }
     }
 }

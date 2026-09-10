@@ -57,22 +57,30 @@ object ExportStore {
 
 object LuauExportAnalyzer {
     private var file: File? = null
+    private var modulePaths: Map<String, String> = emptyMap()
     var pkgExports: MutableMap<String, MutableMap<String, String>> = mutableMapOf()
 
-    fun analyze(path: File, irFiles: List<IrFile>) {
-        file = File(path, "exports.json")
-
-        pkgExports = ExportStore.load(file!!)
+    fun analyze(path: File, irFiles: List<IrFile>, kind: String, paths: Map<String, String>) {
+        file = File(path, "exports-$kind.json")
+        modulePaths = paths
+        val ownExports = mutableMapOf<String, MutableMap<String, String>>()
         irFiles.forEach {
             val pkgName = it.packageFqName.asString()
             val fileExports = analyzeFile(it)
-            pkgExports
-                .getOrPut(pkgName) { mutableMapOf() }
-                .putAll(fileExports)
+            val packageExports = ownExports.getOrPut(pkgName) { mutableMapOf() }
+            require(packageExports.keys.intersect(fileExports.keys).isEmpty()) {
+                "Duplicate exported names in package $pkgName"
+            }
+            packageExports.putAll(fileExports)
         }
 
-        ExportStore.save(file!!, pkgExports)
+        ExportStore.save(file!!, ownExports)
+        pkgExports = if (kind == "shared") mutableMapOf() else ExportStore.load(File(path, "exports-shared.json"))
+        ownExports.forEach { (pkg, exports) -> pkgExports.getOrPut(pkg) { mutableMapOf() }.putAll(exports) }
     }
+
+    fun modulePath(filePath: String): String = modulePaths[filePath]
+        ?: error("No module metadata for $filePath")
 
     fun getFilePathByExportAndPkg(exportName: String, pkgName: String): String? {
         val fileExports = pkgExports[pkgName]?: return null
@@ -81,17 +89,12 @@ object LuauExportAnalyzer {
     }
 
     fun getExportsForFile(irFile: IrFile): List<LuauIdentifier> {
-        val pkgName = irFile.packageFqName.asString()
-        val fileExports = pkgExports[pkgName] ?: return listOf()
-        return fileExports
-            .filter { (_, filePath) -> filePath == irFile.path }
-            .keys
-            .map { LuauIdentifier(it) }
+        return analyzeFile(irFile).keys.map { LuauIdentifier(it) }
     }
 
     private fun analyzeFile(irFile: IrFile): MutableMap<String, String> {
         val declarations = irFile.declarations
-        val filePath = irFile.path
+        val filePath = modulePath(irFile.path)
         val fileExports: MutableMap<String, String> = mutableMapOf()
 
         for (declaration in declarations) {

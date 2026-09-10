@@ -1,6 +1,7 @@
 package xyz.atkdev.rbxkt
 
 import com.rbxkt.types.classes.Part
+import com.rbxkt.types.Entrypoint
 
 fun fizzBuzz(n: Int): () -> String {
     var a = 1
@@ -20,6 +21,7 @@ fun fizzBuzz(n: Int): () -> String {
     }
 }
 
+@Entrypoint
 fun main() {
     val a = arrayOf("30", "20", "5")
     val b: String? = null

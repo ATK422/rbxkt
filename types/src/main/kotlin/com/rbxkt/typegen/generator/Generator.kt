@@ -159,6 +159,7 @@ internal class RobloxTypeGenerator(private val githubApi: GithubApi) {
             .build()
 
         val entrypointAnnotation = TypeSpec.annotationBuilder("Entrypoint")
+            .addKdoc("Marks the startup function for a client or server compilation configured in rbxkt.moduleKinds.\n")
             .addAnnotation(
                 AnnotationSpec.builder(Target::class)
                     .addMember("%T.FUNCTION", AnnotationTarget::class)

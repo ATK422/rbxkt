@@ -11,9 +11,10 @@ object LuauImportAnalyzer : IrVisitorVoid() {
     private val importsMap: MutableMap<String, MutableList<String>> = mutableMapOf()
 
     fun analyze(file: IrFile): MutableMap<String, MutableList<String>> {
-        currentFilePath = file.path
+        currentFilePath = LuauExportAnalyzer.modulePath(file.path)
+        importsMap.clear()
         file.accept(this, null)
-        return importsMap
+        return importsMap.mapValues { (_, names) -> names.distinct().toMutableList() }.toMutableMap()
     }
 
     override fun visitElement(element: IrElement) {

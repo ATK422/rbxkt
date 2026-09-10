@@ -12,6 +12,7 @@ kotlin {
 
 rbxkt {
     outputDir.set("${project.layout.buildDirectory.get().asFile.absolutePath}/out")
+    moduleKinds.set(mapOf("client" to "client", "server" to "server", "shared" to "shared"))
 }
 
 dependencies {

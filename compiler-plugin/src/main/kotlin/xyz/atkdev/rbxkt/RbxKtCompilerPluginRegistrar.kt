@@ -27,7 +27,11 @@ class RbxKtCompilerPluginRegistrar : CompilerPluginRegistrar() {
 //        })
 
         IrGenerationExtension.registerExtension(
-            LuauIrGenerationExtension(outDir)
+            LuauIrGenerationExtension(
+                outDir,
+                configuration.get(ConfigurationKeys.MODULE_KIND),
+                configuration.get(ConfigurationKeys.SOURCE_ROOTS).orEmpty().map(::File)
+            )
         )
     }
 }

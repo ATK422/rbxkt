@@ -91,12 +91,14 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
             builder.line("local ${service}Modules = ${service}.rbxkt.Modules")
         }
 
-        imports.forEach {importPath, identifiers ->
-            val localPath = importPath.substringAfter("src/").substringBefore(".")
+        imports.forEach { (importPath, identifiers) ->
+            val localPath = importPath.substringAfter("src/").substringBeforeLast(".")
             val moduleName = localPath.substringAfterLast('/')
             val serviceName = nameToService(localPath.substringBefore("/").lowercase())
-            val robloxPath = localPath.substringAfter('/').replace("/", ".")
-            builder.line("local $moduleName = require(${serviceName}Modules.$robloxPath)")
+            val robloxPath = localPath.split('/').joinToString("") {
+                "[\"${it.replace("\\", "\\\\").replace("\"", "\\\"")}\"]"
+            }
+            builder.line("local $moduleName = require(${serviceName}Modules$robloxPath)")
             identifiers.forEach { builder.line("local $it = $moduleName.$it") }
         }
 
@@ -108,7 +110,7 @@ data class LuauFile(val name: String, val directives: List<LuauComment>, val stm
         builder.indent {
             for (export in exports) {
                 val name = export.render()
-                builder.line("${name} = ${name}")
+                builder.line("${name} = ${name},")
             }
         }
         builder.line("}")
