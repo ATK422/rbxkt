@@ -109,8 +109,10 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
             return LuauCall(receiver.renderReceiver(), args.drop(1))
         }
 
-        if (name != "toString" && receiver != null && (owner.parent as? IrClass)?.fqNameWhenAvailable?.asString()
-                ?.startsWith("com.rbxkt.types.classes.") == true) {
+        val nativeOwner = (owner.parent as? IrClass)?.fqNameWhenAvailable?.asString()
+        if (name != "toString" && receiver != null &&
+            (nativeOwner?.startsWith("com.rbxkt.types.classes.") == true ||
+                nativeOwner in setOf("com.rbxkt.types.datatypes.RBXScriptSignal", "com.rbxkt.types.datatypes.RBXScriptConnection"))) {
             val property = owner.correspondingPropertySymbol?.owner
             val memberName = nativeName(owner)
             return when {

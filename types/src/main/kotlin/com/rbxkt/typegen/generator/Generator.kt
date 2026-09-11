@@ -277,6 +277,28 @@ internal class RobloxTypeGenerator(private val githubApi: GithubApi) {
                 })
             }
 
+            if (name == "RBXScriptSignal") {
+                builder.addFunction(FunSpec.builder("invoke")
+                    .addModifiers(KModifier.EXTERNAL, KModifier.OPERATOR)
+                    .addLuauName("Connect")
+                    .addParameter("callback", Function::class.asClassName().parameterizedBy(STAR))
+                    .returns(datatypes.getValue("RBXScriptConnection"))
+                    .build())
+                // Function<*> alone supplies no signature for trailing-lambda inference.
+                for ((kotlinName, luauName) in mapOf(
+                    "invoke" to "Connect", "connect" to "Connect",
+                    "connectParallel" to "ConnectParallel", "once" to "Once"
+                )) {
+                    builder.addFunction(FunSpec.builder(kotlinName)
+                        .addModifiers(KModifier.EXTERNAL)
+                        .apply { if (kotlinName == "invoke") addModifiers(KModifier.OPERATOR) }
+                        .addLuauName(luauName)
+                        .addParameter("callback", LambdaTypeName.get(returnType = UNIT))
+                        .returns(datatypes.getValue("RBXScriptConnection"))
+                        .build())
+                }
+            }
+
             file.mathOperations?.forEach { mathOperation ->
                 val operation = mathOperation.operation.fromOperator()
                 val mathBuilder = FunSpec.builder(operation)
@@ -363,7 +385,7 @@ internal class RobloxTypeGenerator(private val githubApi: GithubApi) {
 
             file.events?.forEach { event ->
                 val eventName = event.name.substringAfter(".")
-                val propertyBuilder = PropertySpec.builder(eventName.toCamelCase(), datatypes["RBXScriptConnection"]!!)
+                val propertyBuilder = PropertySpec.builder(eventName.toCamelCase(), datatypes["RBXScriptSignal"]!!)
                     .addSummary(event.summary)
                     .addDeprecation(event.deprecationMessage)
                     .getter(FunSpec.getterBuilder()
@@ -512,7 +534,7 @@ internal class RobloxTypeGenerator(private val githubApi: GithubApi) {
 
     private fun generateEvent(event: ClassModel.ClassEvent, initialize: Boolean = true): PropertySpec {
         val propertyBuilder =
-            PropertySpec.builder(event.name.substringAfter("."), ClassName(PACKAGE_NAME, "RBXScriptConnection"))
+            PropertySpec.builder(event.name.substringAfter("."), datatypes.getValue("RBXScriptSignal"))
                 .addSummary(event.summary)
                 .addDeprecation(event.deprecationMessage)
                 .addTags(event.tags)
