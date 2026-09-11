@@ -78,5 +78,6 @@ class LuauIrGenerationExtension(
             File(relativeDir, "$fileName.ir").writeText(irFile.dump())
         }
         entrypoint?.let { launcher.writeText(it.render(kind, relativePaths.getValue(it.file))) }
+        writeRojoProject(outputDir)
     }
 }

@@ -223,6 +223,24 @@ data class LuauCall(val name: String, val args: List<LuauExpr>) : LuauExpr {
     }
 }
 
+/** Evaluate construction and configuration once, retaining the constructed value. */
+data class LuauBuilderExpr(val instance: LuauExpr, val builder: LuauExpr) : LuauExpr {
+    override fun render() = """
+        |(function(instance, configure)
+        |    configure(instance)
+        |    return instance
+        |end)(${instance.render()}, ${builder.render()})
+    """.trimMargin()
+
+    override fun display(builder: IndentedStringBuilder) {
+        builder.line("LuauBuilderExpr")
+        builder.indent {
+            instance.display(builder)
+            this.builder.display(builder)
+        }
+    }
+}
+
 data class LuauNamecall(val recv: String, val name: String, val args: List<LuauExpr>) : LuauExpr {
     override fun render() = "$recv:$name(${args.joinToString(", ") { it.render() }})"
     override fun display(builder: IndentedStringBuilder) {

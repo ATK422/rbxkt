@@ -46,7 +46,13 @@ directory for sides with entrypoints. Each launcher requires the annotated
 function's module and calls it once. The function remains exported from its
 ModuleScript; requiring that module alone does not call the entrypoint.
 
-Map the generated output into Roblox as follows (only `.luau` files are runtime code):
+The compiler also generates `default.project.json` in `rbxkt.outputDir` (by
+default `build/out`). It is regenerated on compilation and maps the available
+module folders and entrypoint launchers into Roblox, excluding debug artifacts.
+Serve the sample with `rojo serve sample/build/out/default.project.json` after
+compiling it. Keep custom Rojo configuration in a separate project file.
+
+The generated project uses these mappings (only `.luau` files are runtime code):
 
 | Output | Roblox location |
 | --- | --- |
