@@ -42,6 +42,17 @@ tasks.named("test") {
     dependsOn(typeRenderingGoldenTest)
 }
 
+val emitterRegressionTest by tasks.registering(JavaExec::class) {
+    group = "verification"
+    dependsOn(tasks.named("testClasses"), tasks.named("jar"))
+    classpath = sourceSets.test.get().runtimeClasspath
+    mainClass.set("xyz.atkdev.rbxkt.luau.EmitterRegressionTestKt")
+    args(tasks.named<Jar>("jar").flatMap { it.archiveFile }.get().asFile.absolutePath)
+    javaLauncher.set(javaToolchains.launcherFor { languageVersion.set(JavaLanguageVersion.of(21)) })
+}
+
+tasks.named("test") { dependsOn(emitterRegressionTest) }
+
 buildConfig {
     useKotlinOutput {
         internalVisibility = true

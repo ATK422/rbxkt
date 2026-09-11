@@ -42,7 +42,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         } else name
     }
 
-    private fun nativeName(function: IrSimpleFunction): String {
+    private fun nativeName(function: IrSimpleFunction, capitalize: Boolean = true): String {
         fun annotatedName(function: IrSimpleFunction): String? {
             val annotation = function.correspondingPropertySymbol?.owner?.getAnnotation(FqName("com.rbxkt.types.LuauName"))
                 ?: function.getAnnotation(FqName("com.rbxkt.types.LuauName"))
@@ -50,7 +50,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 ?: function.overriddenSymbols.firstNotNullOfOrNull { annotatedName(it.owner) }
         }
         return annotatedName(function) ?: (function.correspondingPropertySymbol?.owner?.name ?: function.name)
-            .asString().replaceFirstChar { it.uppercase() }
+            .asString().let { if (capitalize) it.replaceFirstChar { char -> char.uppercase() } else it }
     }
 
     private fun lowerToStmt(node: LuauNode): LuauStmt {
@@ -84,7 +84,32 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
     }
 
     override fun visitElement(element: IrElement, data: Nothing?): LuauNode {
-        error("Unhandled element: ${element::class.simpleName}")
+        unsupported(element, "Unsupported Kotlin construct (${element::class.simpleName})")
+    }
+
+    private fun unsupported(element: IrElement, reason: String): Nothing =
+        throw UnsupportedLuauNode(element, reason)
+
+    override fun visitGetObjectValue(expression: IrGetObjectValue, data: Nothing?): LuauExpr {
+        val owner = expression.symbol.owner
+        val fqName = owner.fqNameWhenAvailable?.asString().orEmpty()
+        if (fqName == "kotlin.Unit") return LuauNilLiteral
+        if (owner.isCompanion && fqName.startsWith("com.rbxkt.types.datatypes.")) {
+            return LuauIdentifier((owner.parent as IrClass).name.asString())
+        }
+        if (fqName.startsWith("com.rbxkt.types.classes.") && !owner.isCompanion && owner.name.asString() != "Studio") {
+            return LuauNamecall("game", "GetService", listOf(LuauStringLiteral(owner.name.asString())))
+        }
+        unsupported(expression, "Unsupported object reference '$fqName'; only Roblox services and datatype companions are supported")
+    }
+
+    override fun visitGetEnumValue(expression: IrGetEnumValue, data: Nothing?): LuauExpr {
+        val entry = expression.symbol.owner
+        val owner = entry.parent as IrClass
+        if (owner.fqNameWhenAvailable?.asString()?.startsWith("com.rbxkt.types.enums.") == true) {
+            return LuauIdentifier("Enum.${owner.name}.${entry.name}")
+        }
+        unsupported(expression, "Unsupported enum reference '${owner.name}.${entry.name}'")
     }
 
     override fun visitVararg(expression: IrVararg, data: Nothing?): LuauExpr {
@@ -104,6 +129,21 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         val name = owner.name.asString()
         val args = expression.arguments
             .mapNotNull { it?.accept(this, data) as? LuauExpr }
+
+        if (name == "CHECK_NOT_NULL" && owner.getPackageFragment().packageFqName.asString() == "kotlin.internal.ir") {
+            val value = LuauIdentifier("value")
+            val check = LuauLambdaExpr(listOf(LuauParameter(value, "any")), listOf(
+                LuauExprStmt(LuauCall("assert", listOf(LuauBinaryExpr(value, "~=", LuauNilLiteral, true)))),
+                LuauReturn(listOf(value))
+            ))
+            return LuauCall("(${check.render()})", args)
+        }
+
+        val declaringClass = owner.parent as? IrClass
+        if (declaringClass?.isCompanion == true &&
+            declaringClass.fqNameWhenAvailable?.asString()?.startsWith("com.rbxkt.types.datatypes.") == true) {
+            return LuauCall("${receiver!!.renderReceiver()}.${nativeName(owner, capitalize = false)}", args.drop(1))
+        }
 
         if (name == "invoke" && receiver != null && expression.dispatchReceiver!!.type.isFunction()) {
             return LuauCall(receiver.renderReceiver(), args.drop(1))
@@ -204,7 +244,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
                 IrStatementOrigin.NOT_IN -> null
                 IrStatementOrigin.POSTFIX_INCR -> null
                 IrStatementOrigin.POSTFIX_DECR -> null
-                else -> error("Unhandled Operator Expression: ${expression.origin}")
+                else -> unsupported(expression, "Unsupported Kotlin operator '${expression.origin}'")
             }
 
             op?.let {
@@ -232,7 +272,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         return when (expression.operator) {
             IrTypeOperator.IMPLICIT_CAST, IrTypeOperator.IMPLICIT_COERCION_TO_UNIT -> expression.argument.accept(this, data)
             IrTypeOperator.CAST -> LuauCastExpr(expression.argument.accept(this, data) as LuauExpr, LuauTypeSolver.fromIr(expression.typeOperand))
-            else -> error("Unhandled type operator: ${expression.operator}")
+            else -> unsupported(expression, "Unsupported Kotlin type operator '${expression.operator}'")
         }
     }
 
@@ -375,6 +415,10 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
             return LuauBuilderExpr(instance, args.single())
         }
 
+        if (constructorType.startsWith("com.rbxkt.types.datatypes.")) {
+            return LuauCall("$className.new", args)
+        }
+
         return LuauNamecall(className, constructorName, args)
     }
 
@@ -438,7 +482,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         is Char -> LuauStringLiteral(value.toString())
         is Number -> LuauNumberLiteral(value)
         is Boolean -> LuauBoolLiteral(value)
-        else -> error("Unsupported constant type: ${value?.let { it::class.simpleName }}")
+        else -> unsupported(expression, "Unsupported Kotlin constant type: ${value::class.simpleName}")
     }
 
     override fun visitVariable(declaration: IrVariable, data: Nothing?): LuauStmt {
@@ -521,7 +565,7 @@ class LuauEmitter(private val context: IrPluginContext): IrVisitor<LuauNode, Not
         val (range, init, body) = when (iteratorType) {
             "kotlin.collections.IntIterator" -> handleIntIterator(iterVar.initializer, loopBodyStmts, loopVarName, data)
             "kotlin.collections.CharIterator" -> handleCharIterator(iterVar.initializer, loopBodyStmts, loopVarName, data)
-            else -> error("Unhandled iterator type: $iteratorType")
+            else -> unsupported(expression, "Unsupported Kotlin iterator type: $iteratorType")
         }
 
         return LuauForLoop(

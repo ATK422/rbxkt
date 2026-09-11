@@ -3,6 +3,8 @@ package xyz.atkdev.rbxkt.ir
 import org.jetbrains.kotlin.backend.common.extensions.IrGenerationExtension
 import org.jetbrains.kotlin.backend.common.extensions.IrPluginContext
 import org.jetbrains.kotlin.cli.common.messages.MessageCollector
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageSeverity
+import org.jetbrains.kotlin.cli.common.messages.CompilerMessageLocation
 import org.jetbrains.kotlin.incremental.deleteDirectoryContents
 import org.jetbrains.kotlin.ir.backend.js.utils.nameWithoutExtension
 import org.jetbrains.kotlin.ir.declarations.IrModuleFragment
@@ -55,15 +57,36 @@ class LuauIrGenerationExtension(
         LuauExportAnalyzer.analyze(outputDir, files, kind,
             relativePaths.mapKeys { it.key.path }.mapValues { "src/$kind/${it.value}" })
 
+        var failed = false
+        val generated = files.mapNotNull { irFile ->
+            try {
+                irFile to LuauEmitter(pluginContext).emitFile(irFile)
+            } catch (failure: UnsupportedLuauNode) {
+                failed = true
+                val offset = failure.element.startOffset
+                val location = if (offset >= 0) CompilerMessageLocation.create(
+                    irFile.path, irFile.fileEntry.getLineNumber(offset) + 1,
+                    irFile.fileEntry.getColumnNumber(offset) + 1, null
+                ) else CompilerMessageLocation.create(irFile.path)
+                PluginEnvironment.logger.report(
+                    CompilerMessageSeverity.ERROR,
+                    "rbxkt: ${failure.message}. Luau generation stopped for this file. " +
+                        "Rewrite this construct or report it with a minimal Kotlin example. " +
+                        "IR node: ${failure.element::class.simpleName}.",
+                    location
+                )
+                null
+            }
+        }
+        if (failed) return
+
         outputDir.mkdirs()
 
         File(outputDir, kind).takeIf { it.isDirectory }?.deleteDirectoryContents()
         val launcher = File(outputDir, "main.$kind.luau")
         if (kind != "shared") launcher.delete()
 
-        files.forEach { irFile ->
-            val emitter = LuauEmitter(pluginContext)
-            val luauFile = emitter.emitFile(irFile)
+        generated.forEach { (irFile, luauFile) ->
             val code = luauFile.render()
 
             val relativeDir = File(File(outputDir, kind), relativePaths.getValue(irFile)).parentFile
